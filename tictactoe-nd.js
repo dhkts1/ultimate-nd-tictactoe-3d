@@ -22,7 +22,6 @@ class NDTicTacToe {
         this.hoveredCell = null;
         this.selectedCells = new Map(); // For tracking selections in ultimate mode
         this.autoRotate = false;
-        this.isOrthographic = false;
         
         // Ultimate mode specific state
         this.activeSubBoard = null; // Which sub-board must be played in
@@ -110,7 +109,12 @@ class NDTicTacToe {
             0.1,
             1000
         );
-        this.camera.position.set(cameraDistance, cameraDistance, cameraDistance);
+        // Position camera to view the 3D cube arrangement better
+        if (this.config.dimensions === 4) {
+            this.camera.position.set(cameraDistance * 0.8, cameraDistance * 1.2, cameraDistance * 0.8);
+        } else {
+            this.camera.position.set(cameraDistance, cameraDistance, cameraDistance);
+        }
         this.camera.lookAt(0, 0, 0);
         
         // Renderer setup
@@ -141,10 +145,20 @@ class NDTicTacToe {
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
-        this.controls.minDistance = boardSize;
-        this.controls.maxDistance = boardSize * 4;
+        // Set camera distance limits to keep cube always visible
+        // Allow much closer zoom for detailed view
+        this.controls.minDistance = boardSize * 0.3; // Allow very close zoom
+        this.controls.maxDistance = boardSize * 6; // Don't zoom too far out
         this.controls.autoRotate = this.autoRotate;
         this.controls.autoRotateSpeed = 1.0;
+        
+        // Always keep the target at the center (origin)
+        this.controls.target.set(0, 0, 0);
+        this.controls.enablePan = false; // Disable panning to keep cube centered
+        
+        // Set limits to keep cube always visible
+        this.controls.enableRotate = true;
+        this.controls.enableZoom = true;
         
         // Lighting
         this.setupLighting(boardSize);
@@ -215,7 +229,7 @@ class NDTicTacToe {
             const cubeSize = this.config.size * spacing;
             const cubeSpacing = cubeSize + spacing * 2;
             const totalSize = (this.config.size - 1) * cubeSpacing + cubeSize;
-            return Math.max(cubeSize, totalSize);
+            return totalSize * 1.2; // Increase for better view of 3x3x3 arrangement
         } else if (this.config.dimensions === 5) {
             // 5D cubes are arranged in a 2D grid
             const spacing = 1.2;
@@ -513,7 +527,9 @@ class NDTicTacToe {
                 // coords[0,1,2] determine position within outer cube
                 // coords[3] determines which "layer" but we arrange all in 3D
                 
-                // Convert the full 4D coordinate to an outer cube index
+                // For 4D hypercube: use first 3 coords to determine outer cube
+                // coords[0,1,2] determine which of the 27 outer cubes (3x3x3 arrangement)
+                // coords[3] determines position within that outer cube (0,1,2)
                 const outerCubeIndex = coords[0] * 9 + coords[1] * 3 + coords[2];
                 
                 if (this.subCubeGroups[outerCubeIndex]) {
@@ -716,12 +732,22 @@ class NDTicTacToe {
                     position.y += (outerY - (size - 1) / 2) * cubeSpacing;
                     position.z += (outerZ - (size - 1) / 2) * cubeSpacing;
                 } else if (this.config.dimensions === 5) {
-                    // 5D: Arrange cubes in a 2D grid
-                    const cubeRow = coords[3];
-                    const cubeCol = coords[4];
-                    const totalWidth = (this.config.size - 1) * cubeSpacing;
-                    position.x = cubeCol * cubeSpacing - totalWidth / 2;
-                    position.z = cubeRow * cubeSpacing - totalWidth / 2;
+                    // 5D: Stack hypercubes vertically - true 5D hypercube visualization
+                    // coords[0,1,2] determine outer cube position (3x3x3 arrangement)
+                    // coords[3] determines which 4D layer (0,1,2) - horizontal position  
+                    // coords[4] determines which 5D layer (0,1,2) - vertical stack position
+                    
+                    const outerCubeIndex = coords[0] * 9 + coords[1] * 3 + coords[2];
+                    
+                    // Convert outer cube to 3D position
+                    const outerZ = Math.floor(outerCubeIndex / 9);
+                    const outerY = Math.floor((outerCubeIndex % 9) / 3);
+                    const outerX = outerCubeIndex % 3;
+                    
+                    // Position based on all 5 dimensions
+                    position.x += (outerX - 1) * cubeSpacing + (coords[3] - 1) * cubeSpacing * 3.5;
+                    position.y += (outerY - 1) * cubeSpacing + (coords[4] - 1) * cubeSpacing * 4; // Stack vertically
+                    position.z += (outerZ - 1) * cubeSpacing;
                 }
             }
             
@@ -988,7 +1014,6 @@ class NDTicTacToe {
         // Control buttons
         document.getElementById('reset-view').addEventListener('click', () => this.resetView());
         document.getElementById('auto-rotate').addEventListener('click', () => this.toggleAutoRotate());
-        document.getElementById('perspective-toggle').addEventListener('click', () => this.togglePerspective());
     }
     
     onMouseMove(event) {
@@ -1634,7 +1659,13 @@ class NDTicTacToe {
         const boardSize = this.calculateBoardSize();
         const cameraDistance = boardSize * 2;
         
-        this.camera.position.set(cameraDistance, cameraDistance, cameraDistance);
+        // Position camera to view the 3D cube arrangement better
+        if (this.config.dimensions === 4) {
+            this.camera.position.set(cameraDistance * 0.8, cameraDistance * 1.2, cameraDistance * 0.8);
+        } else {
+            this.camera.position.set(cameraDistance, cameraDistance, cameraDistance);
+        }
+        
         this.camera.lookAt(0, 0, 0);
         this.controls.target.set(0, 0, 0);
         this.controls.update();
@@ -1648,52 +1679,12 @@ class NDTicTacToe {
         button.textContent = this.autoRotate ? 'Stop Rotation' : 'Auto Rotate';
     }
     
-    togglePerspective() {
-        this.isOrthographic = !this.isOrthographic;
-        
-        if (this.isOrthographic) {
-            const aspect = window.innerWidth / window.innerHeight;
-            const frustumSize = this.calculateBoardSize() * 3;
-            
-            this.camera = new THREE.OrthographicCamera(
-                frustumSize * aspect / -2,
-                frustumSize * aspect / 2,
-                frustumSize / 2,
-                frustumSize / -2,
-                0.1,
-                1000
-            );
-        } else {
-            this.camera = new THREE.PerspectiveCamera(
-                75,
-                window.innerWidth / window.innerHeight,
-                0.1,
-                1000
-            );
-        }
-        
-        this.resetView();
-        this.controls.object = this.camera;
-        
-        const button = document.getElementById('perspective-toggle');
-        button.textContent = this.isOrthographic ? 'Perspective View' : 'Orthographic View';
-    }
     
     onWindowResize() {
         const width = window.innerWidth;
         const height = window.innerHeight - 80; // Account for game UI
         
-        if (this.camera instanceof THREE.PerspectiveCamera) {
-            this.camera.aspect = width / height;
-        } else {
-            const aspect = width / height;
-            const frustumSize = this.calculateBoardSize() * 3;
-            this.camera.left = frustumSize * aspect / -2;
-            this.camera.right = frustumSize * aspect / 2;
-            this.camera.top = frustumSize / 2;
-            this.camera.bottom = frustumSize / -2;
-        }
-        
+        this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
     }
