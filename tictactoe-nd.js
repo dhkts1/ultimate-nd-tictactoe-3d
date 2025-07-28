@@ -61,11 +61,9 @@ class NDTicTacToe {
         
         // Create dimension array for engine
         let dimensions = new Array(this.config.dimensions).fill(this.config.size);
-        if (this.config.ultimateMode) {
-            // In ultimate mode, add an extra dimension at the beginning
-            dimensions.unshift(this.config.size);
-        }
         
+        // For ultimate mode, we don't change the engine dimensions
+        // Instead we create 9 separate logical sub-boards within the same dimensional structure
         console.log('Creating NDEngine with dimensions:', dimensions);
         this.engine = new NDEngine(dimensions);
         console.log('Engine created:', this.engine);
@@ -73,19 +71,16 @@ class NDTicTacToe {
         
         // Initialize ultimate mode state
         if (this.config.ultimateMode) {
-            // Calculate number of sub-boards based on dimensions
-            let numSubBoards;
-            if (this.config.dimensions === 2) {
-                // For 2D ultimate: 9 sub-boards in a 3x3 grid
-                numSubBoards = this.config.size * this.config.size;
-            } else {
-                // For 3D+ ultimate: sub-boards equal to size
-                numSubBoards = this.config.size;
-            }
+            // Ultimate mode always has 9 sub-boards arranged in a 3x3 meta-grid
+            const numSubBoards = 9;
             
             this.subBoardWinners = new Array(numSubBoards).fill(null);
             this.subBoardMoveCount = new Array(numSubBoards).fill(0);
             this.activeSubBoard = null; // Start with any board playable
+            
+            // For ultimate mode, each sub-board has the same structure as the main board
+            // Total cells = numSubBoards * cells_per_subboard
+            this.board = new Array(this.engine.totalCells * numSubBoards).fill(null);
         }
         
         this.setupThreeJS();
@@ -201,10 +196,12 @@ class NDTicTacToe {
             if (this.config.dimensions === 2) {
                 // Grid arrangement
                 const gridSize = Math.ceil(Math.sqrt(this.config.size));
-                return gridSize * cubeSize * 0.8; // Adjusted for better camera positioning
+                return gridSize * cubeSpacing;
             } else if (this.config.dimensions === 3) {
-                // Row arrangement - adjust camera distance
-                return cubeSpacing * 2; // Much closer than before
+                // Row arrangement - need to account for the full width
+                // Sub-boards go from -6 to 6 (for 3 sub-boards)
+                const totalWidth = (this.config.size - 1) * cubeSpacing + cubeSize;
+                return totalWidth * 0.8; // Slightly less for better view
             } else if (this.config.dimensions === 4) {
                 // For 4D ultimate, similar to 3D
                 return cubeSpacing * 2.5;
@@ -224,16 +221,14 @@ class NDTicTacToe {
         this.createGridHelper();
         console.log('Grid helper created');
         
-        // Create sub-board visual indicators for ultimate mode
+        // For ultimate mode, create sub-board groups similar to 4D handling
         if (this.config.ultimateMode) {
-            this.createSubBoardIndicators();
-        }
-        
-        // For 4D+, create sub-cube containers
-        if (this.config.dimensions >= 4 && !this.config.ultimateMode) {
+            this.createUltimateModeBoard(cellSize, spacing);
+        } else if (this.config.dimensions >= 4) {
+            // For 4D+, create sub-cube containers
             this.createHighDimensionalBoard(cellSize, spacing);
         } else {
-            // Standard board creation (including ultimate mode)
+            // Standard board creation
             for (let i = 0; i < this.engine.totalCells; i++) {
                 const coords = this.engine.indexToCoords(i);
                 
@@ -247,10 +242,6 @@ class NDTicTacToe {
                     coords: coords,
                     occupied: false
                 };
-                
-                if (this.config.ultimateMode) {
-                    cell.userData.subBoardIndex = this.getSubBoardIndex(i);
-                }
                 
                 this.cellObjects.set(i, cell);
                 this.scene.add(cell);
@@ -305,6 +296,96 @@ class NDTicTacToe {
         cell.add(outline);
         
         return cell;
+    }
+    
+    createUltimateModeBoard(cellSize, spacing) {
+        // Create sub-board groups for ultimate mode
+        this.subBoardGroups = [];
+        const cubeSize = this.config.size * spacing;
+        const cubeSpacing = cubeSize + spacing * 2;
+        
+        // Ultimate mode always has 9 sub-boards arranged in a 3x3 meta-grid
+        const numSubBoards = 9;
+        
+        // Create a group for each sub-board
+        for (let subBoardIndex = 0; subBoardIndex < numSubBoards; subBoardIndex++) {
+            const group = new THREE.Group();
+            group.userData = { subBoardIndex: subBoardIndex };
+            
+            // Position sub-boards in a 3x3 meta-grid pattern
+            const metaRow = Math.floor(subBoardIndex / 3);  // 0, 1, or 2
+            const metaCol = subBoardIndex % 3;              // 0, 1, or 2
+            
+            // Position in 3x3 grid with proper spacing
+            group.position.x = (metaCol - 1) * cubeSpacing; // -cubeSpacing, 0, +cubeSpacing
+            group.position.z = (metaRow - 1) * cubeSpacing; // -cubeSpacing, 0, +cubeSpacing
+            group.position.y = 0;
+            
+            // Add bounding box for each sub-board
+            const boxGeometry = new THREE.BoxGeometry(
+                cubeSize + 0.2,
+                this.config.dimensions === 2 ? 0.1 : cubeSize + 0.2,
+                cubeSize + 0.2
+            );
+            const boxMaterial = new THREE.MeshBasicMaterial({
+                color: this.colors.cell[subBoardIndex % this.colors.cell.length],
+                wireframe: true,
+                transparent: true,
+                opacity: 0.2
+            });
+            const boundingBox = new THREE.Mesh(boxGeometry, boxMaterial);
+            boundingBox.userData = {
+                isSubBoardIndicator: true,
+                subBoardIndex: subBoardIndex
+            };
+            group.add(boundingBox);
+            
+            // Store the indicator for later updates
+            this.subBoardIndicators.set(subBoardIndex, boundingBox);
+            
+            this.subBoardGroups.push(group);
+            this.scene.add(group);
+        }
+        
+        // Create cells for all sub-boards  
+        let globalIndex = 0;
+        
+        for (let subBoardIndex = 0; subBoardIndex < numSubBoards; subBoardIndex++) {
+            for (let localIndex = 0; localIndex < this.engine.totalCells; localIndex++) {
+                const localCoords = this.engine.indexToCoords(localIndex);
+                
+                // Create position relative to sub-board group (local coordinates)
+                const position = new THREE.Vector3();
+                
+                // Map local coordinates to position within the sub-board
+                if (localCoords.length >= 1) {
+                    position.x = (localCoords[0] - (this.config.size - 1) / 2) * spacing;
+                }
+                if (localCoords.length >= 2) {
+                    position.y = (localCoords[1] - (this.config.size - 1) / 2) * spacing;
+                }
+                if (localCoords.length >= 3) {
+                    position.z = (localCoords[2] - (this.config.size - 1) / 2) * spacing;
+                }
+                
+                // Create cell
+                const cell = this.createCell(position, cellSize, localCoords);
+                cell.userData = {
+                    index: globalIndex,
+                    localIndex: localIndex,
+                    coords: localCoords,
+                    occupied: false,
+                    subBoardIndex: subBoardIndex
+                };
+                
+                this.cellObjects.set(globalIndex, cell);
+                
+                // Add cell to its sub-board group
+                this.subBoardGroups[subBoardIndex].add(cell);
+                
+                globalIndex++;
+            }
+        }
     }
     
     createHighDimensionalBoard(cellSize, spacing) {
@@ -439,28 +520,28 @@ class NDTicTacToe {
     
     /**
      * Gets the sub-board index for a given cell index (for ultimate mode)
-     * @param {number} cellIndex - The cell index
-     * @returns {number} The sub-board index
+     * @param {number} cellIndex - The global cell index
+     * @returns {number} The sub-board index (0-8)
      */
     getSubBoardIndex(cellIndex) {
         if (!this.config.ultimateMode) return 0;
         
-        const coords = this.engine.indexToCoords(cellIndex);
-        // In ultimate mode, the first coordinate is the sub-board index
-        return coords[0];
+        // Each sub-board contains engine.totalCells cells
+        // So sub-board index = floor(cellIndex / engine.totalCells)
+        return Math.floor(cellIndex / this.engine.totalCells);
     }
     
     /**
      * Gets the position within a sub-board for a given cell index
-     * @param {number} cellIndex - The cell index
+     * @param {number} cellIndex - The global cell index
      * @returns {number[]} The coordinates within the sub-board
      */
     getSubBoardPosition(cellIndex) {
         if (!this.config.ultimateMode) return this.engine.indexToCoords(cellIndex);
         
-        const coords = this.engine.indexToCoords(cellIndex);
-        // Remove the first coordinate (sub-board index) to get position within sub-board
-        return coords.slice(1);
+        // Get the local index within the sub-board
+        const localIndex = cellIndex % this.engine.totalCells;
+        return this.engine.indexToCoords(localIndex);
     }
     
     /**
@@ -469,12 +550,18 @@ class NDTicTacToe {
      * @returns {boolean} Whether the cell can be played
      */
     isCellPlayable(cellIndex) {
+        // Validate cell index
+        if (cellIndex < 0 || cellIndex >= this.board.length) return false;
+        
         // Cell must be empty
         if (this.board[cellIndex]) return false;
         
         if (!this.config.ultimateMode) return true;
         
         const subBoardIndex = this.getSubBoardIndex(cellIndex);
+        
+        // Validate sub-board index
+        if (subBoardIndex < 0 || subBoardIndex >= 9) return false;
         
         // If sub-board is already won, can't play there
         if (this.subBoardWinners[subBoardIndex]) return false;
@@ -578,88 +665,59 @@ class NDTicTacToe {
         return true;
     }
     
-    createSubBoardIndicators() {
-        if (!this.config.ultimateMode) return;
-        
-        const spacing = 1.2;
-        const cubeSize = this.config.size * spacing;
-        const cubeSpacing = cubeSize + spacing * 2;
-        
-        // Calculate number of sub-boards
-        let numSubBoards;
-        if (this.config.dimensions === 2) {
-            numSubBoards = this.config.size * this.config.size;
-        } else {
-            numSubBoards = this.config.size;
-        }
-        
-        for (let i = 0; i < numSubBoards; i++) {
-            // Create a frame/border for each sub-board
-            const frameGeometry = new THREE.BoxGeometry(
-                cubeSize + 0.2, 
-                this.config.dimensions === 2 ? 0.1 : cubeSize + 0.2, 
-                cubeSize + 0.2
-            );
-            const frameMaterial = new THREE.MeshBasicMaterial({
-                color: 0x444444,
-                wireframe: true,
-                transparent: true,
-                opacity: 0.3
-            });
-            const frame = new THREE.Mesh(frameGeometry, frameMaterial);
-            
-            // Position frame based on sub-board arrangement
-            if (this.config.dimensions === 2) {
-                const gridSize = Math.ceil(Math.sqrt(this.config.size));
-                const row = Math.floor(i / gridSize);
-                const col = i % gridSize;
-                frame.position.x = (col - (gridSize - 1) / 2) * cubeSpacing;
-                frame.position.z = (row - (gridSize - 1) / 2) * cubeSpacing;
-                frame.position.y = 0;
-            } else if (this.config.dimensions === 3) {
-                const totalWidth = (this.config.size - 1) * cubeSpacing;
-                frame.position.x = i * cubeSpacing - totalWidth / 2;
-            }
-            
-            frame.userData = {
-                isSubBoardIndicator: true,
-                subBoardIndex: i
-            };
-            
-            this.subBoardIndicators.set(i, frame);
-            this.scene.add(frame);
-        }
-    }
     
     updateSubBoardIndicators() {
-        if (!this.config.ultimateMode) return;
+        if (!this.config.ultimateMode || !this.subBoardGroups) return;
         
         this.subBoardIndicators.forEach((indicator, index) => {
-            // Update color based on state
+            const group = this.subBoardGroups[index];
+            
+            // Update color and opacity based on state
             if (this.subBoardWinners[index]) {
                 // Sub-board is won
                 indicator.material.color.setHex(
-                    this.subBoardWinners[index] === 'X' ? 0x00ff00 : 0xff0000
+                    this.subBoardWinners[index] === 'X' ? this.colors.X : this.colors.O
                 );
-                indicator.material.opacity = 0.2;
+                indicator.material.opacity = 0.3;
+                
+                // Create a solid fill for won sub-boards if not already created
+                if (!group.userData.wonOverlay) {
+                    const fillGeometry = indicator.geometry.clone();
+                    const fillMaterial = new THREE.MeshPhysicalMaterial({
+                        color: this.subBoardWinners[index] === 'X' ? this.colors.X : this.colors.O,
+                        transparent: true,
+                        opacity: 0.1,
+                        metalness: 0.2,
+                        roughness: 0.3
+                    });
+                    const wonOverlay = new THREE.Mesh(fillGeometry, fillMaterial);
+                    group.add(wonOverlay);
+                    group.userData.wonOverlay = wonOverlay;
+                    
+                    // Add a large 3D mark in the center
+                    const largeMark = this.create3DMark(this.subBoardWinners[index]);
+                    largeMark.scale.set(2.5, 2.5, 2.5);
+                    group.add(largeMark);
+                    group.userData.wonMark = largeMark;
+                }
             } else if (this.activeSubBoard === index) {
                 // This is the active sub-board
                 indicator.material.color.setHex(this.colors.activeBoard);
                 indicator.material.opacity = 0.5;
                 
-                // Add pulsing effect
+                // Add pulsing effect to the entire group
                 const scale = 1 + Math.sin(Date.now() * 0.003) * 0.02;
-                indicator.scale.set(scale, scale, scale);
+                group.scale.set(scale, scale, scale);
             } else if (this.activeSubBoard !== null) {
                 // Not the active sub-board
                 indicator.material.color.setHex(0x444444);
                 indicator.material.opacity = 0.1;
-                indicator.scale.set(1, 1, 1);
+                group.scale.set(1, 1, 1);
             } else {
                 // No active sub-board (free play)
                 indicator.material.color.setHex(0x666666);
                 indicator.material.opacity = 0.3;
-                indicator.scale.set(1, 1, 1);
+                group.scale.set(1, 1, 1);
             }
         });
     }
@@ -916,30 +974,24 @@ class NDTicTacToe {
             let nextSubBoard;
             
             if (this.config.dimensions === 2) {
-                // For 2D ultimate, calculate which sub-board corresponds to the position
-                const row = subBoardPos[0];
-                const col = subBoardPos[1];
-                
-                // Map position to sub-board index (assuming 3x3 sub-boards arranged in sqrt(size) grid)
-                const gridSize = Math.ceil(Math.sqrt(this.config.size));
-                nextSubBoard = row * gridSize + col;
-                
-                // Ensure nextSubBoard is within valid range
-                if (nextSubBoard >= this.config.size) {
-                    nextSubBoard = nextSubBoard % this.config.size;
-                }
-            } else if (this.config.dimensions === 3) {
-                // For 3D ultimate, use the position within the 3D sub-board to determine next sub-board
-                // Map 3D position to linear sub-board index
+                // For 2D ultimate: position (x,y) maps to sub-board at meta-position (x,y)
                 const x = subBoardPos[0];
                 const y = subBoardPos[1];
+                nextSubBoard = y * 3 + x; // Convert 2D position to sub-board index (0-8)
+            } else if (this.config.dimensions === 3) {
+                // For 3D ultimate: use XZ position to determine next sub-board
+                const x = subBoardPos[0];
                 const z = subBoardPos[2];
-                nextSubBoard = x + y * this.config.size + z * this.config.size * this.config.size;
-                nextSubBoard = nextSubBoard % this.config.size;
+                nextSubBoard = z * 3 + x; // Convert XZ position to sub-board index (0-8)
             } else {
-                // For higher dimensions, use first coordinate
-                nextSubBoard = subBoardPos[0];
+                // For higher dimensions, use first two coordinates
+                const x = subBoardPos[0] % 3;
+                const y = subBoardPos[1] % 3;
+                nextSubBoard = y * 3 + x;
             }
+            
+            // Ensure nextSubBoard is within valid range (0-8)
+            nextSubBoard = Math.max(0, Math.min(8, nextSubBoard));
             
             // Set active sub-board for next player
             if (this.subBoardWinners[nextSubBoard] || this.isSubBoardFull(nextSubBoard)) {
@@ -957,8 +1009,17 @@ class NDTicTacToe {
             
             // Add mark
             const mark = this.create3DMark(this.currentPlayer);
-            mark.position.copy(cell.position);
-            this.scene.add(mark);
+            
+            // For ultimate mode, position mark relative to cell within its group
+            if (this.config.ultimateMode && this.subBoardGroups) {
+                const subBoardIndex = this.getSubBoardIndex(index);
+                mark.position.copy(cell.position);
+                this.subBoardGroups[subBoardIndex].add(mark);
+            } else {
+                mark.position.copy(cell.position);
+                this.scene.add(mark);
+            }
+            
             this.markObjects.set(index, mark);
             
             // Animate mark appearance
@@ -976,7 +1037,8 @@ class NDTicTacToe {
             
             if (subBoardWinner && !this.subBoardWinners[subBoardIndex]) {
                 this.subBoardWinners[subBoardIndex] = subBoardWinner;
-                this.highlightSubBoardWin(subBoardIndex, subBoardWinner);
+                // Update visual indicators will handle the win visualization
+                this.updateSubBoardIndicators();
                 
                 // Check if this wins the overall game
                 const overallWinner = this.checkUltimateWinner();
@@ -1019,14 +1081,17 @@ class NDTicTacToe {
     
     /**
      * Checks if a sub-board is full
-     * @param {number} subBoardIndex - The sub-board index
+     * @param {number} subBoardIndex - The sub-board index (0-8)
      * @returns {boolean} Whether the sub-board is full
      */
     isSubBoardFull(subBoardIndex) {
         if (!this.config.ultimateMode) return false;
         
-        for (let i = 0; i < this.engine.totalCells; i++) {
-            if (this.getSubBoardIndex(i) === subBoardIndex && !this.board[i]) {
+        const startIndex = subBoardIndex * this.engine.totalCells;
+        const endIndex = startIndex + this.engine.totalCells;
+        
+        for (let i = startIndex; i < endIndex; i++) {
+            if (!this.board[i]) {
                 return false;
             }
         }
@@ -1039,12 +1104,9 @@ class NDTicTacToe {
      */
     isGameDraw() {
         if (this.config.ultimateMode) {
-            // In ultimate mode, game is draw if all sub-boards are won/full
+            // In ultimate mode, game is draw if all 9 sub-boards are won/full
             // and no player has won the overall game
-            const numSubBoards = this.config.dimensions === 2 ? 
-                this.config.size * this.config.size : this.config.size;
-                
-            for (let i = 0; i < numSubBoards; i++) {
+            for (let i = 0; i < 9; i++) {
                 if (!this.subBoardWinners[i] && !this.isSubBoardFull(i)) {
                     return false;
                 }
@@ -1056,29 +1118,22 @@ class NDTicTacToe {
     
     /**
      * Checks for a winner in a specific sub-board
-     * @param {number} subBoardIndex - The sub-board to check
+     * @param {number} subBoardIndex - The sub-board to check (0-8)
      * @returns {string|null} The winner ('X', 'O') or null
      */
     checkSubBoardWinner(subBoardIndex) {
         if (!this.config.ultimateMode) return null;
         
-        // Get all cells in this sub-board
-        const subBoardCells = [];
-        for (let i = 0; i < this.engine.totalCells; i++) {
-            if (this.getSubBoardIndex(i) === subBoardIndex) {
-                subBoardCells.push(i);
-            }
-        }
+        const startIndex = subBoardIndex * this.engine.totalCells;
         
-        // Check winning combinations within this sub-board
-        // We need to filter winning combinations to only those within this sub-board
+        // Check each winning combination within this sub-board
         for (const combination of this.engine.winningCombinations) {
-            // Check if this combination is entirely within our sub-board
-            if (combination.every(index => this.getSubBoardIndex(index) === subBoardIndex)) {
-                const marks = combination.map(index => this.board[index]);
-                if (marks[0] && marks.every(mark => mark === marks[0])) {
-                    return marks[0];
-                }
+            // Map local combination indices to global indices for this sub-board
+            const globalCombination = combination.map(localIndex => startIndex + localIndex);
+            const marks = globalCombination.map(globalIndex => this.board[globalIndex]);
+            
+            if (marks[0] && marks.every(mark => mark === marks[0])) {
+                return marks[0];
             }
         }
         
@@ -1092,70 +1147,28 @@ class NDTicTacToe {
     checkUltimateWinner() {
         if (!this.config.ultimateMode) return null;
         
-        // Create a virtual board of sub-board winners
-        const virtualBoard = this.subBoardWinners;
+        // Check for 3-in-a-row among the 9 sub-boards arranged in a 3x3 grid
+        const winPatterns = [
+            // Rows
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            // Columns  
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            // Diagonals
+            [0, 4, 8], [2, 4, 6]
+        ];
         
-        // For ultimate mode, we need to check wins among the sub-boards
-        // The arrangement depends on the dimensions
-        let virtualDimensions;
-        
-        if (this.config.dimensions === 2) {
-            // For 2D ultimate: sub-boards are arranged in a square grid
-            // e.g., 9 sub-boards in a 3x3 grid
-            const gridSize = Math.ceil(Math.sqrt(this.config.size));
-            virtualDimensions = [gridSize, gridSize];
-        } else if (this.config.dimensions === 3) {
-            // For 3D ultimate: sub-boards are arranged in a line
-            virtualDimensions = [this.config.size];
-        } else {
-            // For higher dimensions, use the original dimension count
-            virtualDimensions = new Array(this.config.dimensions - 1).fill(this.config.size);
-        }
-        
-        const virtualEngine = new NDEngine(virtualDimensions);
-        
-        // Check each combination
-        for (const combination of virtualEngine.winningCombinations) {
-            // Only check if all indices are valid for our sub-board count
-            if (combination.every(index => index < this.config.size)) {
-                const marks = combination.map(index => virtualBoard[index]);
-                if (marks[0] && marks.every(mark => mark === marks[0])) {
-                    return marks[0];
-                }
+        for (const pattern of winPatterns) {
+            const [a, b, c] = pattern;
+            if (this.subBoardWinners[a] && 
+                this.subBoardWinners[a] === this.subBoardWinners[b] && 
+                this.subBoardWinners[a] === this.subBoardWinners[c]) {
+                return this.subBoardWinners[a];
             }
         }
         
         return null;
     }
     
-    /**
-     * Highlights a won sub-board
-     * @param {number} subBoardIndex - The sub-board that was won
-     * @param {string} winner - The player who won it
-     */
-    highlightSubBoardWin(subBoardIndex, winner) {
-        const indicator = this.subBoardIndicators.get(subBoardIndex);
-        if (indicator) {
-            // Create a solid box to show the sub-board is won
-            const boxGeometry = indicator.geometry.clone();
-            const boxMaterial = new THREE.MeshPhysicalMaterial({
-                color: winner === 'X' ? this.colors.X : this.colors.O,
-                transparent: true,
-                opacity: 0.15,
-                metalness: 0.2,
-                roughness: 0.3
-            });
-            const wonBox = new THREE.Mesh(boxGeometry, boxMaterial);
-            wonBox.position.copy(indicator.position);
-            this.scene.add(wonBox);
-            
-            // Add a large mark in the center of the sub-board
-            const largeMark = this.create3DMark(winner);
-            largeMark.position.copy(indicator.position);
-            largeMark.scale.set(3, 3, 3);
-            this.scene.add(largeMark);
-        }
-    }
     
     checkWinner() {
         // In ultimate mode, we check for ultimate winner separately
@@ -1350,19 +1363,41 @@ class NDTicTacToe {
         }
         
         // Prefer center and corners
-        const centerIndex = Math.floor(this.engine.totalCells / 2);
-        if (availableMoves.includes(centerIndex)) {
-            return centerIndex;
-        }
-        
-        // Try corners
-        const cornerMoves = availableMoves.filter(move => {
-            const coords = this.engine.indexToCoords(move);
-            return coords.every(c => c === 0 || c === this.config.size - 1);
-        });
-        
-        if (cornerMoves.length > 0) {
-            return cornerMoves[Math.floor(Math.random() * cornerMoves.length)];
+        if (this.config.ultimateMode) {
+            // For ultimate mode, look for center cells within each sub-board
+            const centerMoves = availableMoves.filter(move => {
+                const localIndex = move % this.engine.totalCells;
+                const centerIndex = Math.floor(this.engine.totalCells / 2);
+                return localIndex === centerIndex;
+            });
+            if (centerMoves.length > 0) {
+                return centerMoves[Math.floor(Math.random() * centerMoves.length)];
+            }
+            
+            // Try corners within sub-boards
+            const cornerMoves = availableMoves.filter(move => {
+                const localIndex = move % this.engine.totalCells;
+                const coords = this.engine.indexToCoords(localIndex);
+                return coords.every(c => c === 0 || c === this.config.size - 1);
+            });
+            if (cornerMoves.length > 0) {
+                return cornerMoves[Math.floor(Math.random() * cornerMoves.length)];
+            }
+        } else {
+            // Regular mode logic
+            const centerIndex = Math.floor(this.engine.totalCells / 2);
+            if (availableMoves.includes(centerIndex)) {
+                return centerIndex;
+            }
+            
+            // Try corners
+            const cornerMoves = availableMoves.filter(move => {
+                const coords = this.engine.indexToCoords(move);
+                return coords.every(c => c === 0 || c === this.config.size - 1);
+            });
+            if (cornerMoves.length > 0) {
+                return cornerMoves[Math.floor(Math.random() * cornerMoves.length)];
+            }
         }
         
         // Random move
@@ -1393,7 +1428,7 @@ class NDTicTacToe {
         
         if (winner === this.currentPlayer) return 10 - depth;
         if (winner === (this.currentPlayer === 'X' ? 'O' : 'X')) return depth - 10;
-        if (this.moveCount + depth >= this.engine.totalCells || depth >= maxDepth) return 0;
+        if (this.moveCount + depth >= this.board.length || depth >= maxDepth) return 0;
         
         if (isMaximizing) {
             let maxScore = -Infinity;
