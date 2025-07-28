@@ -208,14 +208,14 @@ class NDTicTacToe {
             }
         }
         
-        // For 4D+ dimensions, account for stacking/arrangement
+        // For 4D+ dimensions, account for cube arrangement
         if (this.config.dimensions === 4) {
-            // 4D cubes are stacked vertically
+            // 4D cubes are arranged in a 3D cube pattern
             const spacing = 1.2;
             const cubeSize = this.config.size * spacing;
             const cubeSpacing = cubeSize + spacing * 2;
-            const totalHeight = (this.config.size - 1) * cubeSpacing + cubeSize;
-            return Math.max(cubeSize, totalHeight * 0.8);
+            const totalSize = (this.config.size - 1) * cubeSpacing + cubeSize;
+            return Math.max(cubeSize, totalSize);
         } else if (this.config.dimensions === 5) {
             // 5D cubes are arranged in a 2D grid
             const spacing = 1.2;
@@ -410,25 +410,33 @@ class NDTicTacToe {
         this.subCubeGroups = [];
         
         if (this.config.dimensions === 4) {
-            // Create a vertical stack of 3D cubes
+            // Create nested cube structure: 3x3x3 outer cubes, each containing 3x3x3 cells
             const cubeSize = this.config.size * spacing;
             const cubeSpacing = cubeSize + spacing * 2;
+            const size = this.config.size;
             
-            for (let w = 0; w < this.config.size; w++) {
+            // Create outer cube groups in 3x3x3 arrangement
+            for (let outerIndex = 0; outerIndex < size * size * size; outerIndex++) {
                 const group = new THREE.Group();
-                group.userData = { dimension4: w };
+                group.userData = { outerCubeIndex: outerIndex };
                 
-                // Position groups vertically to stack the cubes
-                const totalHeight = (this.config.size - 1) * cubeSpacing;
-                group.position.y = w * cubeSpacing - totalHeight / 2;
+                // Convert outer cube index to 3D coordinates for 3x3x3 arrangement
+                const outerZ = Math.floor(outerIndex / (size * size));
+                const outerY = Math.floor((outerIndex % (size * size)) / size);
+                const outerX = outerIndex % size;
                 
-                // Add colored bounding box for each 3D cube
-                const boxGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+                // Position outer cube groups in 3D cube pattern
+                group.position.x = (outerX - (size - 1) / 2) * cubeSpacing;
+                group.position.y = (outerY - (size - 1) / 2) * cubeSpacing;
+                group.position.z = (outerZ - (size - 1) / 2) * cubeSpacing;
+                
+                // Add colored bounding box for each outer cube
+                const boxGeometry = new THREE.BoxGeometry(cubeSize + 0.2, cubeSize + 0.2, cubeSize + 0.2);
                 const boxMaterial = new THREE.MeshBasicMaterial({
-                    color: this.colors.cell[w % this.colors.cell.length],
+                    color: this.colors.cell[outerIndex % this.colors.cell.length],
                     wireframe: true,
                     transparent: true,
-                    opacity: 0.2
+                    opacity: 0.3
                 });
                 const boundingBox = new THREE.Mesh(boxGeometry, boxMaterial);
                 group.add(boundingBox);
@@ -465,10 +473,31 @@ class NDTicTacToe {
         // Create cells for all dimensions
         for (let i = 0; i < this.engine.totalCells; i++) {
             const coords = this.engine.indexToCoords(i);
-            const position3D = this.mapToVisualSpace(coords);
             
-            // Create cell
-            const cell = this.createCell(position3D, cellSize, coords);
+            // Create cell with local position within its outer cube
+            const localPosition = new THREE.Vector3();
+            
+            // For 4D, position cells within outer cubes based on 4th dimension
+            if (this.config.dimensions === 4) {
+                // coords[3] determines position within the outer cube
+                // Since we have only 3 values (0,1,2), arrange them in a line
+                localPosition.x = (coords[3] - (this.config.size - 1) / 2) * spacing * 0.3;
+                localPosition.y = 0;
+                localPosition.z = 0;
+            } else {
+                // Map first 3 dimensions to local position within outer cube
+                if (coords.length >= 1) {
+                    localPosition.x = (coords[0] - (this.config.size - 1) / 2) * spacing;
+                }
+                if (coords.length >= 2) {
+                    localPosition.y = (coords[1] - (this.config.size - 1) / 2) * spacing;
+                }
+                if (coords.length >= 3) {
+                    localPosition.z = (coords[2] - (this.config.size - 1) / 2) * spacing;
+                }
+            }
+            
+            const cell = this.createCell(localPosition, cellSize, coords);
             cell.userData = {
                 index: i,
                 coords: coords,
@@ -476,7 +505,25 @@ class NDTicTacToe {
             };
             
             this.cellObjects.set(i, cell);
-            this.scene.add(cell);
+            
+            // Add cell to the appropriate outer cube group
+            if (this.config.dimensions === 4) {
+                // Map 4D coordinates to the correct outer cube
+                // For 3x3x3x3, we need to map to a 3x3x3 arrangement of outer cubes
+                // coords[0,1,2] determine position within outer cube
+                // coords[3] determines which "layer" but we arrange all in 3D
+                
+                // Convert the full 4D coordinate to an outer cube index
+                const outerCubeIndex = coords[0] * 9 + coords[1] * 3 + coords[2];
+                
+                if (this.subCubeGroups[outerCubeIndex]) {
+                    this.subCubeGroups[outerCubeIndex].add(cell);
+                } else {
+                    this.scene.add(cell);
+                }
+            } else {
+                this.scene.add(cell);
+            }
         }
     }
     
@@ -507,7 +554,13 @@ class NDTicTacToe {
         const miniSpacing = 0.8;
         
         if (this.config.dimensions === 4) {
-            for (let w = 0; w < this.config.size; w++) {
+            const size = this.config.size;
+            for (let w = 0; w < size * size * size; w++) {
+                // Convert linear index to 3D coordinates
+                const cubeZ = Math.floor(w / (size * size));
+                const cubeY = Math.floor((w % (size * size)) / size);
+                const cubeX = w % size;
+                
                 const miniCube = new THREE.Mesh(
                     new THREE.BoxGeometry(miniCubeSize, miniCubeSize, miniCubeSize),
                     new THREE.MeshBasicMaterial({
@@ -516,7 +569,9 @@ class NDTicTacToe {
                         opacity: 0.6
                     })
                 );
-                miniCube.position.y = (w - (this.config.size - 1) / 2) * miniSpacing;
+                miniCube.position.x = (cubeX - (size - 1) / 2) * miniSpacing;
+                miniCube.position.y = (cubeY - (size - 1) / 2) * miniSpacing;
+                miniCube.position.z = (cubeZ - (size - 1) / 2) * miniSpacing;
                 overviewGroup.add(miniCube);
             }
         } else if (this.config.dimensions === 5) {
@@ -643,20 +698,23 @@ class NDTicTacToe {
                 const cubeSpacing = cubeSize + spacing * 2;
                 
                 if (this.config.dimensions === 4) {
-                    // 4D: Arrange cubes in a 3D cube pattern (e.g., 3x3x3 for size=3)
-                    const cubeIndex = coords[3];
+                    // 4D: Nested cube structure - outer 3x3x3 arrangement of cubes
+                    // Each outer cube contains inner 3x3x3 cells
+                    // coords[3] determines which outer cube (0-26)
+                    // coords[0-2] determine position within that outer cube
+                    
+                    const outerCubeIndex = coords[3];
                     const size = this.config.size;
                     
-                    // Convert linear index to 3D coordinates within the cube arrangement
-                    const cubeZ = Math.floor(cubeIndex / (size * size));
-                    const cubeY = Math.floor((cubeIndex % (size * size)) / size);
-                    const cubeX = cubeIndex % size;
+                    // Convert outer cube index to 3D coordinates in the outer arrangement
+                    const outerZ = Math.floor(outerCubeIndex / (size * size));
+                    const outerY = Math.floor((outerCubeIndex % (size * size)) / size);
+                    const outerX = outerCubeIndex % size;
                     
-                    // Position cubes in 3D space
-                    const totalSize = (size - 1) * cubeSpacing;
-                    position.x += (cubeX - (size - 1) / 2) * cubeSpacing;
-                    position.y += (cubeY - (size - 1) / 2) * cubeSpacing;
-                    position.z += (cubeZ - (size - 1) / 2) * cubeSpacing;
+                    // Position the outer cube
+                    position.x += (outerX - (size - 1) / 2) * cubeSpacing;
+                    position.y += (outerY - (size - 1) / 2) * cubeSpacing;
+                    position.z += (outerZ - (size - 1) / 2) * cubeSpacing;
                 } else if (this.config.dimensions === 5) {
                     // 5D: Arrange cubes in a 2D grid
                     const cubeRow = coords[3];
@@ -800,20 +858,26 @@ class NDTicTacToe {
         oldLabels.forEach(label => this.scene.remove(label));
         
         if (this.config.dimensions === 4) {
-            // Add labels for each 3D cube slice
+            // Add labels for each outer cube showing its coordinates
             const cubeSize = this.config.size * 1.2;
             const cubeSpacing = cubeSize + 2.4;
+            const size = this.config.size;
             
-            for (let i = 0; i < this.config.size; i++) {
+            for (let outerIndex = 0; outerIndex < size * size * size; outerIndex++) {
+                // Convert outer cube index to 3D coordinates
+                const outerZ = Math.floor(outerIndex / (size * size));
+                const outerY = Math.floor((outerIndex % (size * size)) / size);
+                const outerX = outerIndex % size;
+                
                 const canvas = document.createElement('canvas');
                 canvas.width = 256;
                 canvas.height = 64;
                 const context = canvas.getContext('2d');
                 
-                context.font = 'Bold 24px Arial';
+                context.font = 'Bold 16px Arial';
                 context.fillStyle = '#667eea';
                 context.textAlign = 'center';
-                context.fillText(`4D Slice ${i + 1}`, 128, 40);
+                context.fillText(`Cube (${outerX},${outerY},${outerZ})`, 128, 40);
                 
                 const texture = new THREE.CanvasTexture(canvas);
                 const spriteMaterial = new THREE.SpriteMaterial({ 
@@ -821,9 +885,14 @@ class NDTicTacToe {
                     transparent: true 
                 });
                 const sprite = new THREE.Sprite(spriteMaterial);
-                const totalHeight = (this.config.size - 1) * cubeSpacing;
-                sprite.position.set(cubeSize * 0.8, i * cubeSpacing - totalHeight / 2, 0);
-                sprite.scale.set(3, 0.75, 1);
+                
+                // Position label above each outer cube
+                sprite.position.set(
+                    (outerX - (size - 1) / 2) * cubeSpacing,
+                    (outerY - (size - 1) / 2) * cubeSpacing + cubeSize * 0.8,
+                    (outerZ - (size - 1) / 2) * cubeSpacing
+                );
+                sprite.scale.set(2.5, 0.6, 1);
                 sprite.userData.isDimensionLabel = true;
                 
                 this.scene.add(sprite);
