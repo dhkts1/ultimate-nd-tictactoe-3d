@@ -12,6 +12,12 @@ let cubeOverlays = [];
 let moveHistory = []; // Store recent moves for trail effect
 let cubesWithWinLines = new Set(); // Track which cubes already have winning lines
 
+// Minimap 3D variables
+let minimapScene, minimapCamera, minimapRenderer;
+let minimapCubes = [];
+let minimapRaycaster, minimapMouse;
+let minimapControls;
+
 // Constants
 const CUBE_SIZE = 3;
 const CELL_SIZE = 0.3;
@@ -216,6 +222,96 @@ function initGameState() {
     };
 }
 
+// Initialize minimap 3D
+function initMinimap() {
+    // Minimap scene setup
+    minimapScene = new THREE.Scene();
+    minimapScene.background = new THREE.Color(0x0a0a0a);
+
+    // Minimap camera setup - positioned much closer for detailed view
+    minimapCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    minimapCamera.position.set(3.5, 3, 3.5);
+    minimapCamera.lookAt(0, 0, 0);
+
+    // Minimap renderer setup
+    minimapRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    minimapRenderer.setSize(310, 310);
+    minimapRenderer.setClearColor(0x000000, 0);
+    const minimapCanvas = minimapRenderer.domElement;
+    minimapCanvas.style.cursor = 'pointer';
+    document.getElementById('minimap-canvas-container').appendChild(minimapCanvas);
+
+    // Lighting for minimap
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    minimapScene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    directionalLight.position.set(10, 10, 5);
+    minimapScene.add(directionalLight);
+
+    // Create minimap cubes (much smaller and simpler)
+    createMinimapCubes();
+    
+    // Initialize minimap interaction
+    minimapRaycaster = new THREE.Raycaster();
+    minimapMouse = new THREE.Vector2();
+    
+    // Add minimap controls for zoom and rotation
+    minimapControls = new THREE.OrbitControls(minimapCamera, minimapCanvas);
+    minimapControls.enableDamping = true;
+    minimapControls.dampingFactor = 0.05;
+    minimapControls.minDistance = 2;
+    minimapControls.maxDistance = 15;
+    minimapControls.target.set(0, 0, 0);
+    
+    // Add click event listener to minimap
+    minimapCanvas.addEventListener('click', onMinimapClick);
+}
+
+// Create simplified cubes for minimap
+function createMinimapCubes() {
+    const cubeSize = 0.8;
+    const spacing = 1.2;
+    
+    for (let i = 0; i < TOTAL_CUBES; i++) {
+        // Calculate 3D position: layer, row, column (same logic as main game)
+        const layer = Math.floor(i / 9);
+        const row = Math.floor((i % 9) / 3);
+        const col = i % 3;
+        
+        const cubeX = (col - 1) * spacing;
+        const cubeY = (layer - 1) * spacing;
+        const cubeZ = (row - 1) * spacing;
+        
+        // Create simple cube geometry
+        const cubeGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+        const cubeMaterial = new THREE.MeshPhysicalMaterial({
+            color: CUBE_COLOR,
+            transparent: true,
+            opacity: 0.7,
+            metalness: 0.3,
+            roughness: 0.4
+        });
+
+        const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+        cube.position.set(cubeX, cubeY, cubeZ);
+        cube.userData = { cubeIndex: i };
+        
+        // Add wireframe outline
+        const edges = new THREE.EdgesGeometry(cubeGeometry);
+        const lineMaterial = new THREE.LineBasicMaterial({ 
+            color: 0x666666, 
+            transparent: true, 
+            opacity: 0.5 
+        });
+        const wireframe = new THREE.LineSegments(edges, lineMaterial);
+        cube.add(wireframe);
+        
+        minimapCubes.push(cube);
+        minimapScene.add(cube);
+    }
+}
+
 // Initialize Three.js
 function init() {
     generateCubeWinningCombinations();
@@ -275,6 +371,9 @@ function init() {
     renderer.domElement.addEventListener('click', onMouseClick);
     setupUIListeners();
 
+    // Initialize minimap
+    initMinimap();
+    
     // Start animation
     animate();
 }
@@ -1206,30 +1305,47 @@ function updateUI() {
 }
 
 function updateMinimap() {
-    const minimapCubes = document.querySelectorAll('.minimap-cube');
-    console.log(`Updating minimap. Active cubes: ${gameState.activeCubes}`);
+    console.log(`Updating 3D minimap. Active cubes: ${gameState.activeCubes}`);
     
-    minimapCubes.forEach((elem) => {
-        const cubeIndex = parseInt(elem.getAttribute('data-cube'));
-        elem.classList.remove('active', 'playable', 'won-x', 'won-o');
+    if (minimapCubes.length === 0) {
+        console.log('No minimap cubes found - minimap may not be initialized yet');
+        return;
+    }
+    
+    minimapCubes.forEach((cube, cubeIndex) => {
+        // Reset cube to default state
+        cube.material.color.setHex(CUBE_COLOR);
+        cube.material.emissive.setHex(0x000000);
+        cube.material.emissiveIntensity = 0;
+        cube.scale.set(1, 1, 1);
         
-        // Only highlight if a specific cube is active
-        if (gameState.activeCubes === cubeIndex) {
-            // Single specific active cube - cyan outline
-            elem.classList.add('active');
-            console.log(`Minimap highlighting cube ${cubeIndex}`);
-        }
-        // When activeCubes is null (can play anywhere), don't highlight any cubes
-        
+        // Show won cubes with their colors
         if (gameState.cubeWinners[cubeIndex]) {
-            elem.classList.add(`won-${gameState.cubeWinners[cubeIndex].toLowerCase()}`);
-            elem.setAttribute('data-winner', gameState.cubeWinners[cubeIndex]);
-        } else {
-            elem.setAttribute('data-winner', '');
+            if (gameState.cubeWinners[cubeIndex] === 'X') {
+                cube.material.color.setHex(0x00ff00); // Green for X
+                cube.material.emissive.setHex(0x00ff00);
+                cube.material.emissiveIntensity = 0.3;
+            } else {
+                cube.material.color.setHex(0xff3333); // Red for O
+                cube.material.emissive.setHex(0xff3333);
+                cube.material.emissiveIntensity = 0.3;
+            }
+        }
+        
+        // Highlight active cube with cyan if it's not won
+        if (gameState.activeCubes === cubeIndex && !gameState.cubeWinners[cubeIndex]) {
+            cube.material.color.setHex(0x00ffff); // Cyan for active
+            cube.material.emissive.setHex(0x00ffff);
+            cube.material.emissiveIntensity = 0.4;
+            cube.scale.set(1.1, 1.1, 1.1); // Slightly larger
+            console.log(`3D Minimap highlighting next legal move cube ${cubeIndex}`);
         }
     });
     
-    console.log(`Minimap updated. Found ${minimapCubes.length} cubes.`);
+    // Render the minimap
+    if (minimapRenderer) {
+        minimapRenderer.render(minimapScene, minimapCamera);
+    }
 }
 
 // Game end handlers
@@ -1455,6 +1571,36 @@ function animate() {
     }
     
     renderer.render(scene, camera);
+    
+    // Update and render minimap
+    if (minimapControls) {
+        minimapControls.update();
+    }
+    if (minimapRenderer && minimapScene && minimapCamera) {
+        minimapRenderer.render(minimapScene, minimapCamera);
+    }
+}
+
+// Minimap click handler
+function onMinimapClick(event) {
+    // Calculate mouse position relative to minimap canvas
+    const rect = event.target.getBoundingClientRect();
+    minimapMouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    minimapMouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    // Cast ray from minimap camera
+    minimapRaycaster.setFromCamera(minimapMouse, minimapCamera);
+    const intersects = minimapRaycaster.intersectObjects(minimapCubes);
+
+    if (intersects.length > 0) {
+        const clickedCube = intersects[0].object;
+        const cubeIndex = clickedCube.userData.cubeIndex;
+        
+        console.log(`Minimap cube ${cubeIndex} clicked - focusing main camera`);
+        
+        // Focus the main camera on the clicked cube
+        focusOnCube(cubeIndex);
+    }
 }
 
 // Initialize the game
