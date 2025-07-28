@@ -208,6 +208,23 @@ class NDTicTacToe {
             }
         }
         
+        // For 4D+ dimensions, account for stacking/arrangement
+        if (this.config.dimensions === 4) {
+            // 4D cubes are stacked vertically
+            const spacing = 1.2;
+            const cubeSize = this.config.size * spacing;
+            const cubeSpacing = cubeSize + spacing * 2;
+            const totalHeight = (this.config.size - 1) * cubeSpacing + cubeSize;
+            return Math.max(cubeSize, totalHeight * 0.8);
+        } else if (this.config.dimensions === 5) {
+            // 5D cubes are arranged in a 2D grid
+            const spacing = 1.2;
+            const cubeSize = this.config.size * spacing;
+            const cubeSpacing = cubeSize + spacing * 2;
+            const gridSize = (this.config.size - 1) * cubeSpacing + cubeSize;
+            return Math.max(cubeSize, gridSize * 0.8);
+        }
+        
         const visualDims = Math.min(this.config.dimensions, 3);
         return this.config.size * 1.2 * Math.sqrt(visualDims);
     }
@@ -393,13 +410,19 @@ class NDTicTacToe {
         this.subCubeGroups = [];
         
         if (this.config.dimensions === 4) {
-            // Create a row of 3D cubes
+            // Create a vertical stack of 3D cubes
+            const cubeSize = this.config.size * spacing;
+            const cubeSpacing = cubeSize + spacing * 2;
+            
             for (let w = 0; w < this.config.size; w++) {
                 const group = new THREE.Group();
                 group.userData = { dimension4: w };
                 
+                // Position groups vertically to stack the cubes
+                const totalHeight = (this.config.size - 1) * cubeSpacing;
+                group.position.y = w * cubeSpacing - totalHeight / 2;
+                
                 // Add colored bounding box for each 3D cube
-                const cubeSize = this.config.size * spacing;
                 const boxGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
                 const boxMaterial = new THREE.MeshBasicMaterial({
                     color: this.colors.cell[w % this.colors.cell.length],
@@ -493,7 +516,7 @@ class NDTicTacToe {
                         opacity: 0.6
                     })
                 );
-                miniCube.position.x = (w - (this.config.size - 1) / 2) * miniSpacing;
+                miniCube.position.y = (w - (this.config.size - 1) / 2) * miniSpacing;
                 overviewGroup.add(miniCube);
             }
         } else if (this.config.dimensions === 5) {
@@ -620,11 +643,20 @@ class NDTicTacToe {
                 const cubeSpacing = cubeSize + spacing * 2;
                 
                 if (this.config.dimensions === 4) {
-                    // 4D: Arrange cubes in a row
+                    // 4D: Arrange cubes in a 3D cube pattern (e.g., 3x3x3 for size=3)
                     const cubeIndex = coords[3];
-                    const numCubes = this.config.size;
-                    const totalWidth = (numCubes - 1) * cubeSpacing;
-                    position.x = cubeIndex * cubeSpacing - totalWidth / 2;
+                    const size = this.config.size;
+                    
+                    // Convert linear index to 3D coordinates within the cube arrangement
+                    const cubeZ = Math.floor(cubeIndex / (size * size));
+                    const cubeY = Math.floor((cubeIndex % (size * size)) / size);
+                    const cubeX = cubeIndex % size;
+                    
+                    // Position cubes in 3D space
+                    const totalSize = (size - 1) * cubeSpacing;
+                    position.x += (cubeX - (size - 1) / 2) * cubeSpacing;
+                    position.y += (cubeY - (size - 1) / 2) * cubeSpacing;
+                    position.z += (cubeZ - (size - 1) / 2) * cubeSpacing;
                 } else if (this.config.dimensions === 5) {
                     // 5D: Arrange cubes in a 2D grid
                     const cubeRow = coords[3];
@@ -789,8 +821,8 @@ class NDTicTacToe {
                     transparent: true 
                 });
                 const sprite = new THREE.Sprite(spriteMaterial);
-                const totalWidth = (this.config.size - 1) * cubeSpacing;
-                sprite.position.set(i * cubeSpacing - totalWidth / 2, cubeSize * 0.8, 0);
+                const totalHeight = (this.config.size - 1) * cubeSpacing;
+                sprite.position.set(cubeSize * 0.8, i * cubeSpacing - totalHeight / 2, 0);
                 sprite.scale.set(3, 0.75, 1);
                 sprite.userData.isDimensionLabel = true;
                 
