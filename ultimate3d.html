@@ -206,18 +206,20 @@
             border-radius: 10px;
             border: 1px solid rgba(255, 255, 255, 0.2);
             display: grid;
-            grid-template-columns: repeat(3, 30px);
-            gap: 5px;
+            grid-template-columns: repeat(9, 25px);
+            gap: 3px;
+            max-width: 300px;
         }
 
         .minimap-cube {
-            width: 30px;
-            height: 30px;
+            width: 25px;
+            height: 25px;
             border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 5px;
+            border-radius: 3px;
             cursor: pointer;
             transition: all 0.2s ease;
             position: relative;
+            font-size: 0.8rem;
         }
 
         .minimap-cube.active {
@@ -262,6 +264,7 @@
     </div>
 
     <div class="cube-minimap" id="cube-minimap" style="display: none;">
+        <!-- Layer 0 -->
         <div class="minimap-cube" data-cube="0"></div>
         <div class="minimap-cube" data-cube="1"></div>
         <div class="minimap-cube" data-cube="2"></div>
@@ -271,6 +274,26 @@
         <div class="minimap-cube" data-cube="6"></div>
         <div class="minimap-cube" data-cube="7"></div>
         <div class="minimap-cube" data-cube="8"></div>
+        <!-- Layer 1 -->
+        <div class="minimap-cube" data-cube="9"></div>
+        <div class="minimap-cube" data-cube="10"></div>
+        <div class="minimap-cube" data-cube="11"></div>
+        <div class="minimap-cube" data-cube="12"></div>
+        <div class="minimap-cube" data-cube="13"></div>
+        <div class="minimap-cube" data-cube="14"></div>
+        <div class="minimap-cube" data-cube="15"></div>
+        <div class="minimap-cube" data-cube="16"></div>
+        <div class="minimap-cube" data-cube="17"></div>
+        <!-- Layer 2 -->
+        <div class="minimap-cube" data-cube="18"></div>
+        <div class="minimap-cube" data-cube="19"></div>
+        <div class="minimap-cube" data-cube="20"></div>
+        <div class="minimap-cube" data-cube="21"></div>
+        <div class="minimap-cube" data-cube="22"></div>
+        <div class="minimap-cube" data-cube="23"></div>
+        <div class="minimap-cube" data-cube="24"></div>
+        <div class="minimap-cube" data-cube="25"></div>
+        <div class="minimap-cube" data-cube="26"></div>
     </div>
 
     <div class="camera-controls" id="camera-controls" style="display: none;">
@@ -295,7 +318,7 @@
     </div>
 
     <div class="instructions" id="instructions" style="display: none;">
-        <strong>Ultimate 3D Rules:</strong> Win a small cube to claim it. Your move position determines which cube your opponent plays in next. Win 3 cubes in a row to win the game!
+        <strong>Ultimate 3D Rules:</strong> Win a small cube to claim it. Your move position determines which cube your opponent plays in next. Win 3 cubes in a row (in 3D space) to win the game!
         <br>Click cells to play • Drag to rotate • Scroll to zoom • Use minimap to jump between cubes
     </div>
 
@@ -304,8 +327,8 @@
         <ul>
             <li>🎯 Each cube is a 3x3x3 game</li>
             <li>🎮 Win a cube by getting 3 in a row</li>
-            <li>📍 Your cell position (0-26) determines the next cube (0-8)</li>
-            <li>🏆 Win 3 cubes in a row to win!</li>
+            <li>📍 Your cell position (0-26) determines the next cube (0-26)</li>
+            <li>🏆 Win 3 cubes in a row in 3D space to win!</li>
             <li>💡 If sent to a won cube, play anywhere</li>
             <li>🎨 Active cube glows purple</li>
         </ul>

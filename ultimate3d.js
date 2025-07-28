@@ -15,13 +15,22 @@ const CUBE_SIZE = 3;
 const CELL_SIZE = 0.3;
 const CELL_SPACING = 0.1;
 const CUBE_SPACING = 1.5;
-const TOTAL_CUBES = 9;
+const TOTAL_CUBES = 27;
 
 // Colors
 const CUBE_COLORS = [
+    // Layer 1
     0x667eea, 0x764ba2, 0x8b5cf6,
     0x4ecdc4, 0x45b7d1, 0x3b82f6,
-    0xf093fb, 0xf5576c, 0xff6b6b
+    0xf093fb, 0xf5576c, 0xff6b6b,
+    // Layer 2
+    0x9d4edd, 0x7209b7, 0x560bad,
+    0x06ffa5, 0x4cc9f0, 0x7209b7,
+    0xfb8500, 0xff006e, 0xff5e5b,
+    // Layer 3
+    0x2d00f7, 0x6a00f4, 0x8900f2,
+    0x02c39a, 0x00a896, 0x028090,
+    0xffbe0b, 0xfb8500, 0xff006e
 ];
 
 // Generate winning combinations for 3x3x3
@@ -83,24 +92,130 @@ function generateCubeWinningCombinations() {
     cubeWinningCombinations.push([8, 13, 18]);
 }
 
-// Meta-game winning combinations (3x3)
-const metaWinningCombinations = [
-    [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-    [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-    [0, 4, 8], [2, 4, 6]             // Diagonals
-];
+// Generate meta-game winning combinations for 3x3x3 cube
+function generateMetaWinningCombinations() {
+    const combinations = [];
+    
+    // Helper function to convert layer,row,col to cube index
+    const getCubeIndex = (layer, row, col) => layer * 9 + row * 3 + col;
+    
+    // Horizontal lines within each layer (3 per layer × 3 layers = 9 total)
+    for (let layer = 0; layer < 3; layer++) {
+        for (let row = 0; row < 3; row++) {
+            combinations.push([
+                getCubeIndex(layer, row, 0),
+                getCubeIndex(layer, row, 1),
+                getCubeIndex(layer, row, 2)
+            ]);
+        }
+    }
+    
+    // Vertical lines within each layer (3 per layer × 3 layers = 9 total)
+    for (let layer = 0; layer < 3; layer++) {
+        for (let col = 0; col < 3; col++) {
+            combinations.push([
+                getCubeIndex(layer, 0, col),
+                getCubeIndex(layer, 1, col),
+                getCubeIndex(layer, 2, col)
+            ]);
+        }
+    }
+    
+    // Through layers vertically (3×3 = 9 total)
+    for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+            combinations.push([
+                getCubeIndex(0, row, col),
+                getCubeIndex(1, row, col),
+                getCubeIndex(2, row, col)
+            ]);
+        }
+    }
+    
+    // Diagonal lines within each layer (2 per layer × 3 layers = 6 total)
+    for (let layer = 0; layer < 3; layer++) {
+        // Main diagonal
+        combinations.push([
+            getCubeIndex(layer, 0, 0),
+            getCubeIndex(layer, 1, 1),
+            getCubeIndex(layer, 2, 2)
+        ]);
+        // Anti-diagonal
+        combinations.push([
+            getCubeIndex(layer, 0, 2),
+            getCubeIndex(layer, 1, 1),
+            getCubeIndex(layer, 2, 0)
+        ]);
+    }
+    
+    // Face diagonals through layers
+    // XZ plane diagonals (2 per row × 3 rows = 6 total)
+    for (let row = 0; row < 3; row++) {
+        combinations.push([
+            getCubeIndex(0, row, 0),
+            getCubeIndex(1, row, 1),
+            getCubeIndex(2, row, 2)
+        ]);
+        combinations.push([
+            getCubeIndex(0, row, 2),
+            getCubeIndex(1, row, 1),
+            getCubeIndex(2, row, 0)
+        ]);
+    }
+    
+    // YZ plane diagonals (2 per col × 3 cols = 6 total)
+    for (let col = 0; col < 3; col++) {
+        combinations.push([
+            getCubeIndex(0, 0, col),
+            getCubeIndex(1, 1, col),
+            getCubeIndex(2, 2, col)
+        ]);
+        combinations.push([
+            getCubeIndex(0, 2, col),
+            getCubeIndex(1, 1, col),
+            getCubeIndex(2, 0, col)
+        ]);
+    }
+    
+    // Space diagonals (4 total - corner to corner through entire 3x3x3)
+    combinations.push([
+        getCubeIndex(0, 0, 0), // 0
+        getCubeIndex(1, 1, 1), // 13
+        getCubeIndex(2, 2, 2)  // 26
+    ]);
+    combinations.push([
+        getCubeIndex(0, 0, 2), // 2
+        getCubeIndex(1, 1, 1), // 13
+        getCubeIndex(2, 2, 0)  // 24
+    ]);
+    combinations.push([
+        getCubeIndex(0, 2, 0), // 6
+        getCubeIndex(1, 1, 1), // 13
+        getCubeIndex(2, 0, 2)  // 20
+    ]);
+    combinations.push([
+        getCubeIndex(0, 2, 2), // 8
+        getCubeIndex(1, 1, 1), // 13
+        getCubeIndex(2, 0, 0)  // 18
+    ]);
+    
+    return combinations;
+}
+
+// Meta-game winning combinations (3x3x3)
+const metaWinningCombinations = generateMetaWinningCombinations();
 
 // Initialize game state
 function initGameState() {
     gameState = {
-        boards: Array(9).fill(null).map(() => 
+        boards: Array(27).fill(null).map(() => 
             Array(3).fill(null).map(() => 
                 Array(3).fill(null).map(() => 
                     Array(3).fill(null)
                 )
             )
         ),
-        cubeWinners: Array(9).fill(null),
+        cubeWinners: Array(27).fill(null),
         activeCubes: null, // null means all cubes are active
         currentPlayer: 'X',
         gameWinner: null,
@@ -123,7 +238,7 @@ function init() {
 
     // Camera setup
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(15, 15, 15);
+    camera.position.set(20, 20, 20);
     camera.lookAt(0, 0, 0);
 
     // Renderer setup
@@ -137,8 +252,8 @@ function init() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 10;
-    controls.maxDistance = 50;
+    controls.minDistance = 15;
+    controls.maxDistance = 60;
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -179,15 +294,21 @@ function init() {
     animate();
 }
 
-// Create the 9 cubes
+// Create the 27 cubes
 function createCubes() {
     const cubeContainer = new THREE.Group();
     
     for (let i = 0; i < TOTAL_CUBES; i++) {
         const cubeGroup = new THREE.Group();
-        const cubeX = (i % 3 - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
-        const cubeY = 0;
-        const cubeZ = (Math.floor(i / 3) - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
+        // Calculate 3D position: layer, row, column
+        const layer = Math.floor(i / 9);
+        const row = Math.floor((i % 9) / 3);
+        const col = i % 3;
+        
+        const cubeX = (col - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
+        const cubeY = (layer - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3 + 3;
+        const cubeZ = (row - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
+        
         
         cubeGroup.position.set(cubeX, cubeY, cubeZ);
         cubeGroup.userData = { cubeIndex: i };
@@ -267,11 +388,13 @@ function createCubes() {
 
 // Create platform
 function createPlatform() {
-    const platformGeometry = new THREE.BoxGeometry(20, 0.2, 20);
+    const platformGeometry = new THREE.BoxGeometry(25, 0.2, 25);
     const platformMaterial = new THREE.MeshPhysicalMaterial({
         color: 0x111111,
         metalness: 0.8,
-        roughness: 0.2
+        roughness: 0.2,
+        transparent: true,
+        opacity: 0
     });
     const platform = new THREE.Mesh(platformGeometry, platformMaterial);
     platform.position.y = -2;
@@ -324,13 +447,15 @@ function create3DO() {
 
 // Determine next cube based on cell position
 function determineNextCube(cellIndex) {
-    // Map cell position to cube position
-    // Layer mapping: z=0 → cubes 0-2, z=1 → cubes 3-5, z=2 → cubes 6-8
-    const z = Math.floor(cellIndex / 9);
-    const y = Math.floor((cellIndex % 9) / 3);
-    const x = cellIndex % 3;
+    // Map cell position (0-26) to cube position (0-26)
+    // Cell layout: z * 9 + y * 3 + x
+    // Cube layout: layer * 9 + row * 3 + col
+    const cellZ = Math.floor(cellIndex / 9);
+    const cellY = Math.floor((cellIndex % 9) / 3);
+    const cellX = cellIndex % 3;
     
-    return z * 3 + x;
+    // Map to cube coordinates (cell position maps directly to cube position)
+    return cellZ * 9 + cellY * 3 + cellX;
 }
 
 // Check if a move is valid
@@ -548,8 +673,8 @@ function updateActiveHighlights() {
     cubes.forEach(cube => {
         cube.cells.forEach(cell => {
             if (!cell.userData.occupied) {
-                cell.material.opacity = 0.2;
-                cell.material.emissiveIntensity = 0.02;
+                cell.material.opacity = 0.1;
+                cell.material.emissiveIntensity = 0.01;
             }
         });
     });
@@ -575,26 +700,27 @@ function highlightCube(cubeIndex) {
     // Brighten cells
     cube.cells.forEach(cell => {
         if (!cell.userData.occupied) {
-            cell.material.opacity = 0.4;
-            cell.material.emissiveIntensity = 0.1;
+            cell.material.opacity = 0.7;
+            cell.material.emissiveIntensity = 0.3;
         }
     });
     
-    // Add glowing border
-    const glowGeometry = new THREE.BoxGeometry(
+    // Add clean frame border
+    const frameGeometry = new THREE.BoxGeometry(
         3 * CELL_SIZE + 3 * CELL_SPACING,
         3 * CELL_SIZE + 3 * CELL_SPACING,
         3 * CELL_SIZE + 3 * CELL_SPACING
     );
-    const glowMaterial = new THREE.MeshBasicMaterial({
+    const frameEdges = new THREE.EdgesGeometry(frameGeometry);
+    const frameMaterial = new THREE.LineBasicMaterial({
         color: 0xf093fb,
-        wireframe: true,
+        linewidth: 3,
         transparent: true,
-        opacity: 0.6
+        opacity: 0.9
     });
-    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-    cube.group.add(glow);
-    activeHighlights.push(glow);
+    const frame = new THREE.LineSegments(frameEdges, frameMaterial);
+    cube.group.add(frame);
+    activeHighlights.push(frame);
 }
 
 // Mouse handlers
@@ -949,7 +1075,7 @@ function focusOnCube(cubeIndex) {
 function viewAllCubes() {
     const duration = 1000;
     const startPos = camera.position.clone();
-    const targetPos = new THREE.Vector3(15, 15, 15);
+    const targetPos = new THREE.Vector3(20, 20, 20);
     const startTime = Date.now();
     
     function animate() {
@@ -1000,7 +1126,9 @@ function updateUI() {
         if (gameState.activeCubes === null) {
             activeCubeElement.textContent = 'Play in any cube';
         } else {
-            activeCubeElement.textContent = `Play in cube ${gameState.activeCubes + 1}`;
+            const layer = Math.floor(gameState.activeCubes / 9) + 1;
+            const cubeInLayer = (gameState.activeCubes % 9) + 1;
+            activeCubeElement.textContent = `Play in cube ${gameState.activeCubes + 1} (Layer ${layer}, Cube ${cubeInLayer})`;
         }
     }
     
