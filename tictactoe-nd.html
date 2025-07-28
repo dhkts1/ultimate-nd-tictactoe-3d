@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N-Dimensional Tic-Tac-Toe</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .main-container {
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 20px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb, #4facfe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 5s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            margin-bottom: 20px;
+        }
+
+        .config-panel {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .config-section {
+            margin-bottom: 30px;
+        }
+
+        .config-section h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+            font-size: 1.3rem;
+        }
+
+        .slider-container {
+            margin-bottom: 20px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .slider-value {
+            color: #f093fb;
+            font-weight: bold;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            outline: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 15px rgba(102, 126, 234, 0.5);
+        }
+
+        .game-mode-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .mode-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .mode-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .mode-card.selected {
+            background: rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .mode-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .complexity-info {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .info-item {
+            text-align: center;
+        }
+
+        .info-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #4facfe;
+            margin-bottom: 5px;
+        }
+
+        .info-label {
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+
+        .warning {
+            background: rgba(245, 87, 108, 0.2);
+            border: 1px solid rgba(245, 87, 108, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .warning.show {
+            display: block;
+        }
+
+        .start-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 18px 40px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+            margin: 30px auto 0;
+            display: block;
+        }
+
+        .start-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(118, 75, 162, 0.5);
+        }
+
+        .start-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            display: none;
+        }
+
+        .game-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .game-status {
+            background: rgba(102, 126, 234, 0.2);
+            border: 1px solid rgba(102, 126, 234, 0.5);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+        }
+
+        .dimension-controls {
+            position: absolute;
+            right: 20px;
+            top: 100px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 300px;
+            z-index: 10;
+        }
+
+        .dimension-slider {
+            margin-bottom: 15px;
+        }
+
+        .control-button {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 20px;
+            font-size: 0.95rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            margin: 5px;
+        }
+
+        .control-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .back-button {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .config-panel {
+                margin: 20px;
+                padding: 20px;
+            }
+            
+            .game-mode-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .dimension-controls {
+                right: 10px;
+                top: 80px;
+                padding: 15px;
+                max-width: 250px;
+            }
+        }
+
+        .toggle-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 10px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .switch-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: .4s;
+            border-radius: 26px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .switch-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 3px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .switch-slider {
+            background-color: rgba(102, 126, 234, 0.3);
+        }
+
+        input:checked + .switch-slider:before {
+            transform: translateX(24px);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="header">
+            <h1>N-Dimensional Tic-Tac-Toe</h1>
+            <p class="subtitle">Experience Tic-Tac-Toe in up to 5 dimensions!</p>
+        </div>
+
+        <div class="config-panel" id="config-panel">
+            <div class="config-section">
+                <h3>Game Configuration</h3>
+                
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Number of Dimensions</span>
+                        <span class="slider-value" id="dimensions-value">3D</span>
+                    </div>
+                    <input type="range" id="dimensions-slider" min="2" max="5" value="3" step="1">
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Size per Dimension</span>
+                        <span class="slider-value" id="size-value">3×3×3</span>
+                    </div>
+                    <input type="range" id="size-slider" min="3" max="5" value="3" step="1">
+                </div>
+
+                <div class="slider-container" id="ultimate-container" style="display: none;">
+                    <div class="slider-label">
+                        <span>Ultimate Mode
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="ultimate-toggle">
+                                <span class="switch">
+                                    <span class="switch-slider"></span>
+                                </span>
+                            </label>
+                        </span>
+                        <span class="slider-value" id="ultimate-value">Off</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-section">
+                <h3>Game Mode</h3>
+                <div class="game-mode-container">
+                    <div class="mode-card selected" data-mode="vs-computer">
+                        <div class="mode-icon">🤖</div>
+                        <div>vs Computer</div>
+                    </div>
+                    <div class="mode-card" data-mode="two-players">
+                        <div class="mode-icon">👥</div>
+                        <div>2 Players</div>
+                    </div>
+                    <div class="mode-card" data-mode="ai-vs-ai">
+                        <div class="mode-icon">🤖🆚🤖</div>
+                        <div>Computer vs Computer</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="complexity-info">
+                <h3>Game Complexity</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-value" id="total-cells">27</div>
+                        <div class="info-label">Total Cells</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-value" id="win-lines">49</div>
+                        <div class="info-label">Win Lines</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-value" id="complexity-level">Medium</div>
+                        <div class="info-label">Complexity</div>
+                    </div>
+                </div>
+                <div class="warning" id="performance-warning">
+                    ⚠️ This configuration may cause performance issues on some devices. Consider reducing the dimensions or size.
+                </div>
+            </div>
+
+            <button class="start-button" id="start-game">Start Game</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div class="game-ui">
+            <div class="game-info">
+                <div class="game-status" id="game-status">Player X's Turn</div>
+                <div class="game-status" id="move-count">Moves: 0</div>
+            </div>
+        </div>
+
+        <div class="dimension-controls" id="dimension-controls" style="display: none;">
+            <h4 style="margin-bottom: 15px; color: #667eea;">View Controls</h4>
+            <div id="dimension-sliders"></div>
+            <div style="margin-top: 15px;">
+                <button class="control-button" id="reset-view">Reset View</button>
+                <button class="control-button" id="auto-rotate">Auto Rotate</button>
+                <button class="control-button" id="perspective-toggle">Toggle Perspective</button>
+            </div>
+        </div>
+
+        <button class="control-button back-button" id="back-to-config">Back to Configuration</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="nd-engine.js"></script>
+    <script src="tictactoe-nd.js"></script>
+    <script>
+        // Configuration state
+        let config = {
+            dimensions: 3,
+            size: 3,
+            ultimateMode: false,
+            gameMode: 'vs-computer'
+        };
+
+        // UI Elements
+        const dimensionsSlider = document.getElementById('dimensions-slider');
+        const sizeSlider = document.getElementById('size-slider');
+        const ultimateToggle = document.getElementById('ultimate-toggle');
+        const ultimateContainer = document.getElementById('ultimate-container');
+        const dimensionsValue = document.getElementById('dimensions-value');
+        const sizeValue = document.getElementById('size-value');
+        const ultimateValue = document.getElementById('ultimate-value');
+        const totalCells = document.getElementById('total-cells');
+        const winLines = document.getElementById('win-lines');
+        const complexityLevel = document.getElementById('complexity-level');
+        const performanceWarning = document.getElementById('performance-warning');
+        const startButton = document.getElementById('start-game');
+        const configPanel = document.getElementById('config-panel');
+        const gameContainer = document.getElementById('game-container');
+        const gameStatus = document.getElementById('game-status');
+        const moveCount = document.getElementById('move-count');
+        const dimensionControls = document.getElementById('dimension-controls');
+        const dimensionSlidersContainer = document.getElementById('dimension-sliders');
+
+        // Game mode selection
+        document.querySelectorAll('.mode-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+                config.gameMode = card.dataset.mode;
+            });
+        });
+
+        // Update configuration display
+        function updateConfigDisplay() {
+            // Update dimension display
+            const dimNames = ['2D', '3D', '4D', '5D'];
+            dimensionsValue.textContent = dimNames[config.dimensions - 2];
+            
+            // Update size display
+            let sizeText = '';
+            for (let i = 0; i < config.dimensions; i++) {
+                sizeText += config.size;
+                if (i < config.dimensions - 1) sizeText += '×';
+            }
+            sizeValue.textContent = sizeText;
+            
+            // Update ultimate mode display
+            if (config.dimensions >= 3 && config.size >= 3) {
+                ultimateContainer.style.display = 'block';
+                ultimateValue.textContent = config.ultimateMode ? 'On' : 'Off';
+            } else {
+                ultimateContainer.style.display = 'none';
+                config.ultimateMode = false;
+            }
+            
+            // Calculate total cells
+            const cells = Math.pow(config.size, config.dimensions) * (config.ultimateMode ? config.size : 1);
+            totalCells.textContent = cells;
+            
+            // Calculate win lines (approximation)
+            const lines = calculateWinLines();
+            winLines.textContent = lines;
+            
+            // Determine complexity
+            let complexity = 'Low';
+            if (cells > 100) complexity = 'Medium';
+            if (cells > 500) complexity = 'High';
+            if (cells > 1000) complexity = 'Very High';
+            if (cells > 5000) complexity = 'Extreme';
+            
+            complexityLevel.textContent = complexity;
+            complexityLevel.style.color = 
+                complexity === 'Low' ? '#4facfe' :
+                complexity === 'Medium' ? '#667eea' :
+                complexity === 'High' ? '#f093fb' :
+                complexity === 'Very High' ? '#fa709a' :
+                '#f5576c';
+            
+            // Show performance warning
+            performanceWarning.classList.toggle('show', cells > 1000);
+        }
+
+        function calculateWinLines() {
+            // Simplified calculation for demonstration
+            // In reality, this would be more complex for N dimensions
+            let lines = 0;
+            
+            // Lines along each dimension
+            lines += config.dimensions * Math.pow(config.size, config.dimensions - 1);
+            
+            // Diagonal lines (simplified)
+            lines += Math.pow(2, config.dimensions);
+            
+            if (config.ultimateMode) {
+                lines *= config.size;
+            }
+            
+            return lines;
+        }
+
+        // Event listeners
+        dimensionsSlider.addEventListener('input', (e) => {
+            config.dimensions = parseInt(e.target.value);
+            updateConfigDisplay();
+        });
+
+        sizeSlider.addEventListener('input', (e) => {
+            config.size = parseInt(e.target.value);
+            updateConfigDisplay();
+        });
+
+        ultimateToggle.addEventListener('change', (e) => {
+            config.ultimateMode = e.target.checked;
+            updateConfigDisplay();
+        });
+
+        // Start game
+        startButton.addEventListener('click', () => {
+            startGame();
+        });
+
+        // Back to config
+        document.getElementById('back-to-config').addEventListener('click', () => {
+            gameContainer.style.display = 'none';
+            configPanel.parentElement.style.display = 'block';
+            if (window.gameInstance) {
+                window.gameInstance.dispose();
+            }
+        });
+
+        // Initialize game
+        function startGame() {
+            configPanel.parentElement.style.display = 'none';
+            gameContainer.style.display = 'block';
+            
+            // Show dimension controls for 4D+ games
+            if (config.dimensions >= 4) {
+                dimensionControls.style.display = 'block';
+                setupDimensionControls();
+            } else {
+                dimensionControls.style.display = 'none';
+            }
+            
+            // Initialize the game (this would be implemented in a separate JS file)
+            initializeNDGame(config);
+        }
+
+        function setupDimensionControls() {
+            dimensionSlidersContainer.innerHTML = '';
+            
+            if (config.dimensions >= 4) {
+                // Add sliders for higher dimensions
+                for (let d = 4; d <= config.dimensions; d++) {
+                    const sliderDiv = document.createElement('div');
+                    sliderDiv.className = 'dimension-slider';
+                    sliderDiv.innerHTML = `
+                        <div class="slider-label">
+                            <span>Dimension ${d} Slice</span>
+                            <span class="slider-value" id="dim${d}-value">1</span>
+                        </div>
+                        <input type="range" id="dim${d}-slider" min="1" max="${config.size}" value="1" step="1">
+                    `;
+                    dimensionSlidersContainer.appendChild(sliderDiv);
+                    
+                    // Add event listener
+                    const slider = sliderDiv.querySelector(`#dim${d}-slider`);
+                    const valueSpan = sliderDiv.querySelector(`#dim${d}-value`);
+                    slider.addEventListener('input', (e) => {
+                        valueSpan.textContent = e.target.value;
+                        if (window.gameInstance) {
+                            window.gameInstance.updateDimensionSlice(d, parseInt(e.target.value) - 1);
+                        }
+                    });
+                }
+            }
+        }
+
+        // Placeholder for game initialization
+        function initializeNDGame(config) {
+            console.log('Initializing N-D game with config:', config);
+            // This would be implemented in a separate tictactoe-nd.js file
+            // For now, just show a message
+            gameStatus.textContent = `${config.dimensions}D Game Started!`;
+        }
+
+        // Initial display update
+        updateConfigDisplay();
+    </script>
+</body>
+</html>

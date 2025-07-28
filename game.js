@@ -276,6 +276,8 @@ modeBtns.forEach(btn => {
             window.location.href = 'tictactoe3d.html';
         } else if (mode === 'ultimate3d') {
             window.location.href = 'ultimate3d.html';
+        } else if (mode === 'nd') {
+            window.location.href = 'tictactoe-nd.html';
         } else {
             selectMode(mode);
         }
