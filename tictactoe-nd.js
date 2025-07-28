@@ -201,10 +201,13 @@ class NDTicTacToe {
             if (this.config.dimensions === 2) {
                 // Grid arrangement
                 const gridSize = Math.ceil(Math.sqrt(this.config.size));
-                return gridSize * cubeSpacing;
+                return gridSize * cubeSize * 0.8; // Adjusted for better camera positioning
             } else if (this.config.dimensions === 3) {
-                // Row arrangement
-                return this.config.size * cubeSpacing;
+                // Row arrangement - adjust camera distance
+                return cubeSpacing * 2; // Much closer than before
+            } else if (this.config.dimensions === 4) {
+                // For 4D ultimate, similar to 3D
+                return cubeSpacing * 2.5;
             }
         }
         
