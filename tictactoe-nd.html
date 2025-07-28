@@ -409,15 +409,15 @@
                 <div class="slider-container">
                     <div class="slider-label">
                         <span>Number of Dimensions</span>
-                        <span class="slider-value" id="dimensions-value">3D</span>
+                        <span class="slider-value" id="dimensions-value">4D</span>
                     </div>
-                    <input type="range" id="dimensions-slider" min="2" max="5" value="3" step="1">
+                    <input type="range" id="dimensions-slider" min="2" max="5" value="4" step="1">
                 </div>
 
                 <div class="slider-container">
                     <div class="slider-label">
                         <span>Size per Dimension</span>
-                        <span class="slider-value" id="size-value">3×3×3</span>
+                        <span class="slider-value" id="size-value">3×3×3×3</span>
                     </div>
                     <input type="range" id="size-slider" min="3" max="5" value="3" step="1">
                 </div>
@@ -454,7 +454,7 @@
                 <h3>Game Complexity</h3>
                 <div class="info-grid">
                     <div class="info-item">
-                        <div class="info-value" id="total-cells">27</div>
+                        <div class="info-value" id="total-cells">81</div>
                         <div class="info-label">Total Cells</div>
                     </div>
                     <div class="info-item">
@@ -503,7 +503,7 @@
     <script>
         // Configuration state
         let config = {
-            dimensions: 3,
+            dimensions: 4,
             size: 3,
             ultimateMode: false,
             gameMode: 'vs-computer'
