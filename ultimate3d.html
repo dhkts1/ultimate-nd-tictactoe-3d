@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate 3D Tic-Tac-Toe</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+            overflow: hidden;
+            color: white;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            margin-bottom: 10px;
+        }
+
+        .status {
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding: 10px 20px;
+            background: rgba(102, 126, 234, 0.2);
+            border: 1px solid rgba(102, 126, 234, 0.5);
+            border-radius: 10px;
+        }
+
+        .active-cube-info {
+            font-size: 1rem;
+            padding: 8px 16px;
+            background: rgba(245, 87, 108, 0.2);
+            border: 1px solid rgba(245, 87, 108, 0.5);
+            border-radius: 8px;
+        }
+
+        .score {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 12px 24px;
+            font-size: 1rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .mode-selection {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            color: #333;
+        }
+
+        .mode-selection h2 {
+            color: #764ba2;
+            margin-bottom: 20px;
+        }
+
+        .mode-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 10px;
+            font-size: 1.1rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+        }
+
+        .mode-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(118, 75, 162, 0.4);
+        }
+
+        .instructions {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            font-size: 0.9rem;
+            opacity: 0.8;
+            max-width: 600px;
+            line-height: 1.5;
+        }
+
+        .help-panel {
+            position: absolute;
+            top: 100px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            width: 250px;
+            display: none;
+        }
+
+        .help-panel h3 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .help-panel ul {
+            list-style: none;
+            font-size: 0.9rem;
+            line-height: 1.8;
+        }
+
+        .help-panel li {
+            margin-bottom: 5px;
+        }
+
+        .camera-controls {
+            position: absolute;
+            top: 100px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .camera-btn {
+            padding: 8px 16px;
+            margin: 5px;
+            font-size: 0.9rem;
+        }
+
+        .cube-minimap {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: grid;
+            grid-template-columns: repeat(3, 30px);
+            gap: 5px;
+        }
+
+        .minimap-cube {
+            width: 30px;
+            height: 30px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .minimap-cube.active {
+            border-color: #f093fb;
+            background: rgba(240, 147, 251, 0.3);
+        }
+
+        .minimap-cube.won-x {
+            background: rgba(102, 126, 234, 0.5);
+        }
+
+        .minimap-cube.won-o {
+            background: rgba(245, 87, 108, 0.5);
+        }
+
+        .minimap-cube::after {
+            content: attr(data-winner);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div class="ui-overlay">
+        <h1>Ultimate 3D Tic-Tac-Toe</h1>
+        <div class="game-info" id="game-info" style="display: none;">
+            <div class="status" id="status">Your turn (X)</div>
+            <div class="active-cube-info" id="active-cube-info">Play anywhere</div>
+            <div class="score">
+                <span id="player1-label">You</span>: <span id="player1-score">0</span>
+            </div>
+            <div class="score">
+                <span id="player2-label">Computer</span>: <span id="player2-score">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="cube-minimap" id="cube-minimap" style="display: none;">
+        <div class="minimap-cube" data-cube="0"></div>
+        <div class="minimap-cube" data-cube="1"></div>
+        <div class="minimap-cube" data-cube="2"></div>
+        <div class="minimap-cube" data-cube="3"></div>
+        <div class="minimap-cube" data-cube="4"></div>
+        <div class="minimap-cube" data-cube="5"></div>
+        <div class="minimap-cube" data-cube="6"></div>
+        <div class="minimap-cube" data-cube="7"></div>
+        <div class="minimap-cube" data-cube="8"></div>
+    </div>
+
+    <div class="camera-controls" id="camera-controls" style="display: none;">
+        <button class="camera-btn" id="view-all-btn">View All</button>
+        <button class="camera-btn" id="focus-active-btn">Focus Active</button>
+        <button class="camera-btn" id="rotate-view-btn">Rotate View</button>
+    </div>
+
+    <div class="mode-selection" id="mode-selection">
+        <h2>Select Game Mode</h2>
+        <button class="mode-btn" data-mode="single">vs Computer</button>
+        <button class="mode-btn" data-mode="two">2 Players</button>
+        <button class="mode-btn" data-mode="ai-vs-ai">Computer vs Computer</button>
+        <button class="mode-btn" onclick="window.location.href='index.html'">Back to Menu</button>
+    </div>
+
+    <div class="controls" id="controls" style="display: none;">
+        <button id="reset-btn">New Game</button>
+        <button id="change-mode-btn">Change Mode</button>
+        <button id="help-btn">Help</button>
+        <button id="auto-rotate-btn">Auto Rotate</button>
+    </div>
+
+    <div class="instructions" id="instructions" style="display: none;">
+        <strong>Ultimate 3D Rules:</strong> Win a small cube to claim it. Your move position determines which cube your opponent plays in next. Win 3 cubes in a row to win the game!
+        <br>Click cells to play • Drag to rotate • Scroll to zoom • Use minimap to jump between cubes
+    </div>
+
+    <div class="help-panel" id="help-panel">
+        <h3>How to Play</h3>
+        <ul>
+            <li>🎯 Each cube is a 3x3x3 game</li>
+            <li>🎮 Win a cube by getting 3 in a row</li>
+            <li>📍 Your cell position (0-26) determines the next cube (0-8)</li>
+            <li>🏆 Win 3 cubes in a row to win!</li>
+            <li>💡 If sent to a won cube, play anywhere</li>
+            <li>🎨 Active cube glows purple</li>
+        </ul>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="ultimate3d.js"></script>
+</body>
+</html>

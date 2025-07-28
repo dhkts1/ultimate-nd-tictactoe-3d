@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Tic-Tac-Toe</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .mode-selection {
+            margin-bottom: 30px;
+        }
+        
+        .mode-selection h2 {
+            color: #555;
+            margin-bottom: 15px;
+        }
+        
+        .mode-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        .mode-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+        
+        .mode-button:hover {
+            background-color: #45a049;
+        }
+        
+        .mode-button.active {
+            background-color: #2196F3;
+        }
+        
+        .game-container {
+            display: none;
+        }
+        
+        .game-container.active {
+            display: block;
+        }
+        
+        .score-board {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        
+        .player-score {
+            padding: 10px 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .player-score.active {
+            background-color: #e3f2fd;
+            font-weight: bold;
+        }
+        
+        .game-status {
+            font-size: 20px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            color: #333;
+            min-height: 30px;
+        }
+        
+        .ultimate-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            padding: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .mini-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .mini-board.active {
+            background-color: #ffffcc;
+            box-shadow: 0 0 10px rgba(255, 255, 0, 0.5);
+        }
+        
+        .mini-board.won {
+            background-color: #ddd;
+            opacity: 0.7;
+        }
+        
+        .mini-board.won::after {
+            content: attr(data-winner);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 60px;
+            font-weight: bold;
+            color: #333;
+            opacity: 0.8;
+        }
+        
+        .cell {
+            width: 50px;
+            height: 50px;
+            background-color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 24px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            border-radius: 3px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .cell:hover:not(:disabled) {
+            background-color: #f5f5f5;
+        }
+        
+        .cell:disabled {
+            cursor: not-allowed;
+            opacity: 0.9;
+        }
+        
+        .mini-board.won .cell {
+            opacity: 0.3;
+        }
+        
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .change-mode-btn {
+            background-color: #ff9800;
+        }
+        
+        .change-mode-btn:hover {
+            background-color: #e68900;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ultimate Tic-Tac-Toe</h1>
+        
+        <div class="mode-selection" id="modeSelection">
+            <h2>Select Game Mode</h2>
+            <div class="mode-buttons">
+                <a href="index.html" class="mode-button">Classic Tic-Tac-Toe</a>
+                <button class="mode-button active" onclick="startUltimateGame()">Ultimate Tic-Tac-Toe</button>
+            </div>
+        </div>
+        
+        <div class="game-container" id="gameContainer">
+            <div class="score-board">
+                <div class="player-score active" id="player1Score">
+                    Player X: <span id="score1">0</span>
+                </div>
+                <div class="player-score" id="player2Score">
+                    Player O: <span id="score2">0</span>
+                </div>
+            </div>
+            
+            <div class="game-status" id="gameStatus">Player X's turn</div>
+            
+            <div class="ultimate-board" id="ultimateBoard">
+                <!-- 9 mini boards will be generated by JavaScript -->
+            </div>
+            
+            <div class="controls">
+                <button onclick="resetGame()">Reset Game</button>
+                <button class="change-mode-btn" onclick="changeMode()">Change Mode</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Game state
+        let currentPlayer = 'X';
+        let scores = { X: 0, O: 0 };
+        let boardStates = Array(9).fill(null).map(() => Array(9).fill(''));
+        let boardWinners = Array(9).fill(null);
+        let activeBoard = null; // null means any board can be played
+        let gameActive = true;
+        
+        // Initialize the game
+        function initializeGame() {
+            createBoards();
+            updateGameStatus();
+        }
+        
+        // Create the 9 mini boards
+        function createBoards() {
+            const ultimateBoard = document.getElementById('ultimateBoard');
+            ultimateBoard.innerHTML = '';
+            
+            for (let boardIndex = 0; boardIndex < 9; boardIndex++) {
+                const miniBoard = document.createElement('div');
+                miniBoard.className = 'mini-board';
+                miniBoard.setAttribute('data-board', boardIndex);
+                
+                for (let cellIndex = 0; cellIndex < 9; cellIndex++) {
+                    const cell = document.createElement('button');
+                    cell.className = 'cell';
+                    cell.setAttribute('data-board', boardIndex);
+                    cell.setAttribute('data-cell', cellIndex);
+                    cell.onclick = () => handleCellClick(boardIndex, cellIndex);
+                    miniBoard.appendChild(cell);
+                }
+                
+                ultimateBoard.appendChild(miniBoard);
+            }
+            
+            updateBoardHighlights();
+        }
+        
+        // Handle cell click
+        function handleCellClick(boardIndex, cellIndex) {
+            if (!gameActive || boardStates[boardIndex][cellIndex] || boardWinners[boardIndex]) {
+                return;
+            }
+            
+            if (activeBoard !== null && activeBoard !== boardIndex) {
+                return;
+            }
+            
+            // Make the move
+            boardStates[boardIndex][cellIndex] = currentPlayer;
+            const cell = document.querySelector(`[data-board="${boardIndex}"][data-cell="${cellIndex}"]`);
+            cell.textContent = currentPlayer;
+            cell.disabled = true;
+            
+            // Check if this mini board is won
+            if (checkWin(boardStates[boardIndex])) {
+                boardWinners[boardIndex] = currentPlayer;
+                const miniBoard = document.querySelector(`[data-board="${boardIndex}"]`);
+                miniBoard.classList.add('won');
+                miniBoard.setAttribute('data-winner', currentPlayer);
+            }
+            
+            // Check if the ultimate game is won
+            if (checkWin(boardWinners)) {
+                endGame(`Player ${currentPlayer} wins!`);
+                scores[currentPlayer]++;
+                updateScores();
+                return;
+            }
+            
+            // Check for draw
+            if (boardWinners.every(winner => winner !== null)) {
+                endGame("It's a draw!");
+                return;
+            }
+            
+            // Determine next active board
+            activeBoard = cellIndex;
+            if (boardWinners[activeBoard] !== null) {
+                activeBoard = null; // Play anywhere if sent to won board
+            }
+            
+            // Switch player
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            updateGameStatus();
+            updateBoardHighlights();
+        }
+        
+        // Check win condition
+        function checkWin(board) {
+            const winPatterns = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+                [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+                [0, 4, 8], [2, 4, 6] // Diagonals
+            ];
+            
+            return winPatterns.some(pattern => {
+                const [a, b, c] = pattern;
+                return board[a] && board[a] === board[b] && board[a] === board[c];
+            });
+        }
+        
+        // Update board highlights
+        function updateBoardHighlights() {
+            document.querySelectorAll('.mini-board').forEach((board, index) => {
+                if (activeBoard === null || activeBoard === index) {
+                    board.classList.add('active');
+                } else {
+                    board.classList.remove('active');
+                }
+            });
+        }
+        
+        // Update game status
+        function updateGameStatus() {
+            const statusElement = document.getElementById('gameStatus');
+            if (gameActive) {
+                statusElement.textContent = `Player ${currentPlayer}'s turn`;
+                if (activeBoard !== null) {
+                    statusElement.textContent += ` (Board ${activeBoard + 1})`;
+                } else {
+                    statusElement.textContent += ' (Any board)';
+                }
+            }
+            
+            // Update active player indicator
+            document.getElementById('player1Score').classList.toggle('active', currentPlayer === 'X');
+            document.getElementById('player2Score').classList.toggle('active', currentPlayer === 'O');
+        }
+        
+        // Update scores
+        function updateScores() {
+            document.getElementById('score1').textContent = scores.X;
+            document.getElementById('score2').textContent = scores.O;
+        }
+        
+        // End game
+        function endGame(message) {
+            gameActive = false;
+            document.getElementById('gameStatus').textContent = message;
+        }
+        
+        // Reset game
+        function resetGame() {
+            currentPlayer = 'X';
+            boardStates = Array(9).fill(null).map(() => Array(9).fill(''));
+            boardWinners = Array(9).fill(null);
+            activeBoard = null;
+            gameActive = true;
+            initializeGame();
+        }
+        
+        // Start ultimate game
+        function startUltimateGame() {
+            document.getElementById('modeSelection').style.display = 'none';
+            document.getElementById('gameContainer').classList.add('active');
+            initializeGame();
+        }
+        
+        // Change mode
+        function changeMode() {
+            document.getElementById('gameContainer').classList.remove('active');
+            document.getElementById('modeSelection').style.display = 'block';
+            resetGame();
+        }
+        
+        // Initialize on page load
+        window.onload = function() {
+            // If coming directly to this page, show mode selection
+            document.getElementById('modeSelection').style.display = 'block';
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Tic-Tac-Toe</h1>
+        <div class="mode-selection" id="mode-selection">
+            <h2>Select Game Mode</h2>
+            <button class="mode-btn" data-mode="single">vs Computer</button>
+            <button class="mode-btn" data-mode="two">2 Players</button>
+            <button class="mode-btn" data-mode="ultimate">Ultimate Tic-Tac-Toe</button>
+            <button class="mode-btn" data-mode="3d">3D Tic-Tac-Toe</button>
+            <button class="mode-btn" data-mode="ultimate3d">Ultimate 3D (9 Cubes)</button>
+        </div>
+        <div class="game-info" id="game-info" style="display: none;">
+            <div class="status" id="status">Your turn (X)</div>
+            <div class="scores">
+                <div class="score">
+                    <span class="label" id="player1-label">Player 1</span>
+                    <span class="value" id="player1-score">0</span>
+                </div>
+                <div class="score">
+                    <span class="label" id="player2-label">Player 2</span>
+                    <span class="value" id="player2-score">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="game-board" id="board" style="display: none;">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
+        </div>
+        <div class="game-controls" id="game-controls" style="display: none;">
+            <button class="reset-btn" id="reset-btn">New Game</button>
+            <button class="reset-btn" id="change-mode-btn">Change Mode</button>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
