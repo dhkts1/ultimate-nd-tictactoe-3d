@@ -17,6 +17,10 @@ let minimapScene, minimapCamera, minimapRenderer;
 let minimapCubes = [];
 let minimapRaycaster, minimapMouse;
 let minimapControls;
+let lastMainCameraPosition = new THREE.Vector3();
+let lastMinimapCameraPosition = new THREE.Vector3();
+let isSyncingFromMinimap = false;
+let minimapScaleFactor = 1/2; // Adjustable scale factor for minimap zoom
 
 // Constants
 const CUBE_SIZE = 3;
@@ -228,14 +232,14 @@ function initMinimap() {
     minimapScene = new THREE.Scene();
     minimapScene.background = new THREE.Color(0x0a0a0a);
 
-    // Minimap camera setup - positioned much closer for detailed view
-    minimapCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-    minimapCamera.position.set(3.5, 3, 3.5);
+    // Minimap camera setup - positioned with less zoom for better overview
+    minimapCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    minimapCamera.position.set(4.5, 3.5, 4.5);
     minimapCamera.lookAt(0, 0, 0);
 
     // Minimap renderer setup
     minimapRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    minimapRenderer.setSize(310, 310);
+    minimapRenderer.setSize(380, 380);
     minimapRenderer.setClearColor(0x000000, 0);
     const minimapCanvas = minimapRenderer.domElement;
     minimapCanvas.style.cursor = 'pointer';
@@ -256,16 +260,8 @@ function initMinimap() {
     minimapRaycaster = new THREE.Raycaster();
     minimapMouse = new THREE.Vector2();
     
-    // Add minimap controls for zoom and rotation
-    minimapControls = new THREE.OrbitControls(minimapCamera, minimapCanvas);
-    minimapControls.enableDamping = true;
-    minimapControls.dampingFactor = 0.05;
-    minimapControls.minDistance = 2;
-    minimapControls.maxDistance = 15;
-    minimapControls.target.set(0, 0, 0);
-    
-    // Add click event listener to minimap
-    minimapCanvas.addEventListener('click', onMinimapClick);
+    // Disable minimap controls - it only syncs to main camera
+    minimapControls = null;
 }
 
 // Create simplified cubes for minimap
@@ -322,9 +318,9 @@ function init() {
     scene.background = new THREE.Color(0x0a0a0a);
     scene.fog = new THREE.Fog(0x0a0a0a, 10, 50);
 
-    // Camera setup
+    // Camera setup - much closer default zoom
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(20, 10, 20);
+    camera.position.set(10, 6, 10);
     camera.lookAt(0, 1, 0);
 
     // Renderer setup
@@ -333,12 +329,13 @@ function init() {
     renderer.shadowMap.enabled = false;
     document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-    // Controls
+    // Controls - slower zoom and closer default position
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.minDistance = 3;
     controls.maxDistance = 60;
+    controls.zoomSpeed = 0.3;
 
     // Much brighter and more even lighting - no reflections
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
@@ -1550,6 +1547,9 @@ function animate() {
     
     controls.update();
     
+    // Sync minimap to main camera only
+    syncMinimapToMain();
+    
     // Update move trail
     updateMoveTrail();
     
@@ -1572,35 +1572,83 @@ function animate() {
     
     renderer.render(scene, camera);
     
-    // Update and render minimap
-    if (minimapControls) {
-        minimapControls.update();
-    }
+    // No minimap controls update needed - it's synced from main camera
     if (minimapRenderer && minimapScene && minimapCamera) {
         minimapRenderer.render(minimapScene, minimapCamera);
     }
 }
 
-// Minimap click handler
-function onMinimapClick(event) {
-    // Calculate mouse position relative to minimap canvas
-    const rect = event.target.getBoundingClientRect();
-    minimapMouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    minimapMouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-    // Cast ray from minimap camera
-    minimapRaycaster.setFromCamera(minimapMouse, minimapCamera);
-    const intersects = minimapRaycaster.intersectObjects(minimapCubes);
-
-    if (intersects.length > 0) {
-        const clickedCube = intersects[0].object;
-        const cubeIndex = clickedCube.userData.cubeIndex;
+// Sync cameras bidirectionally
+function syncCameras() {
+    if (!minimapControls || !controls) return;
+    
+    const movementThreshold = 0.01;
+    const currentMainPos = camera.position.clone();
+    const currentMinimapPos = minimapCamera.position.clone();
+    
+    const mainMoved = lastMainCameraPosition.distanceTo(currentMainPos) > movementThreshold;
+    const minimapMoved = lastMinimapCameraPosition.distanceTo(currentMinimapPos) > movementThreshold;
+    
+    // If both moved, prioritize the one that moved more
+    if (mainMoved && minimapMoved) {
+        const mainMovement = lastMainCameraPosition.distanceTo(currentMainPos);
+        const minimapMovement = lastMinimapCameraPosition.distanceTo(currentMinimapPos);
         
-        console.log(`Minimap cube ${cubeIndex} clicked - focusing main camera`);
-        
-        // Focus the main camera on the clicked cube
-        focusOnCube(cubeIndex);
+        if (minimapMovement > mainMovement && !isSyncingFromMinimap) {
+            // Minimap moved more, sync main to minimap
+            syncMainToMinimap();
+        } else if (mainMovement > minimapMovement && isSyncingFromMinimap) {
+            // Main moved more, sync minimap to main
+            syncMinimapToMain();
+        }
+    } else if (minimapMoved && !isSyncingFromMinimap) {
+        // Only minimap moved, sync main camera
+        syncMainToMinimap();
+    } else if (mainMoved && isSyncingFromMinimap) {
+        // Only main moved, sync minimap camera
+        syncMinimapToMain();
     }
+    
+    // Update last positions
+    lastMainCameraPosition.copy(currentMainPos);
+    lastMinimapCameraPosition.copy(currentMinimapPos);
+}
+
+// Sync main camera to minimap orientation and zoom
+function syncMainToMinimap() {
+    isSyncingFromMinimap = true;
+    
+    // Get minimap camera's relative direction and distance
+    const minimapDirection = minimapCamera.position.clone().normalize();
+    const minimapDistance = minimapCamera.position.length();
+    
+    // Scale the distance for main camera (minimap distance * scale factor)
+    const scaleFactor = 3; // Adjust this to change zoom relationship
+    const newMainDistance = minimapDistance * scaleFactor;
+    const newMainPosition = controls.target.clone().add(minimapDirection.multiplyScalar(newMainDistance));
+    
+    camera.position.copy(newMainPosition);
+    controls.update();
+    
+    setTimeout(() => { isSyncingFromMinimap = false; }, 100);
+}
+
+// Sync minimap camera to main camera orientation and zoom
+function syncMinimapToMain() {
+    if (!minimapCamera) return;
+    
+    // Get main camera's relative direction and distance
+    const mainDirection = camera.position.clone().sub(controls.target).normalize();
+    const mainDistance = camera.position.distanceTo(controls.target);
+    
+    // Scale the distance for minimap camera
+    const scaleFactor = 1/2; // Half scale for minimap
+    const newMinimapDistance = mainDistance * scaleFactor;
+    const newMinimapPosition = mainDirection.multiplyScalar(newMinimapDistance);
+    
+    minimapCamera.position.copy(newMinimapPosition);
+    minimapCamera.lookAt(0, 0, 0);
 }
 
 // Initialize the game
