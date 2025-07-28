@@ -244,19 +244,19 @@ function init() {
     controls.minDistance = 3;
     controls.maxDistance = 60;
 
-    // Lighting - brighter and more even
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    // Much brighter and more even lighting - no reflections
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
 
-    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.6);
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight1.position.set(20, 20, 10);
     scene.add(directionalLight1);
 
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
     directionalLight2.position.set(-20, 10, 10);
     scene.add(directionalLight2);
 
-    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.3);
+    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.5);
     directionalLight3.position.set(0, -10, -20);
     scene.add(directionalLight3);
 
@@ -627,7 +627,6 @@ function checkGameWinner() {
         if (winners[0] && winners[0] === winners[1] && winners[0] === winners[2]) {
             console.log(`Game won! Player ${winners[0]} won with cubes: ${combination.join(', ')}`);
             console.log(`Cube winners state:`, gameState.cubeWinners);
-            createGameWinLine(combination);
             return true;
         }
     }
@@ -701,27 +700,6 @@ function createCubeWinLine(cubeIndex, cells) {
     winningLines.push(winLine);
 }
 
-// Create winning line for the game
-function createGameWinLine(cubeIndices) {
-    const points = cubeIndices.map(idx => {
-        const cube = cubes[idx];
-        return cube.group.position.clone().add(new THREE.Vector3(0, 2, 0));
-    });
-    
-    const curve = new THREE.CatmullRomCurve3(points);
-    const tubeGeometry = new THREE.TubeGeometry(curve, 20, 0.2, 8, false);
-    const tubeMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x00ff00,
-        emissive: 0x00ff00,
-        emissiveIntensity: 0.8
-    });
-    const winLine = new THREE.Mesh(tubeGeometry, tubeMaterial);
-    scene.add(winLine);
-    winningLines.push(winLine);
-    
-    // Animate winning line
-    animateGameWinLine(winLine);
-}
 
 // Update active cube highlights
 function updateActiveHighlights() {
@@ -733,19 +711,23 @@ function updateActiveHighlights() {
     });
     activeHighlights = [];
     
-    // No dimming - keep all cubes at normal visibility
+    console.log('Active cubes:', gameState.activeCubes);
     
     // Highlight active cubes - only show outline on the specific active cube
     if (gameState.activeCubes !== null) {
         // Only one cube is active - highlight it
+        console.log('Highlighting cube:', gameState.activeCubes);
         highlightCube(gameState.activeCubes);
+    } else {
+        console.log('No cube highlighted - can play anywhere');
     }
-    // If activeCubes is null (can play anywhere), don't show any outlines
 }
 
 // Highlight a cube
 function highlightCube(cubeIndex) {
     const cube = cubes[cubeIndex];
+    
+    console.log('Adding highlight to cube:', cubeIndex);
     
     // Only add wireframe border (no cell brightening)
     const frameGeometry = new THREE.BoxGeometry(
@@ -763,6 +745,8 @@ function highlightCube(cubeIndex) {
     const frame = new THREE.LineSegments(frameEdges, frameMaterial);
     cube.group.add(frame);
     activeHighlights.push(frame);
+    
+    console.log('Total active highlights now:', activeHighlights.length);
 }
 
 // Mouse handlers
@@ -1072,22 +1056,6 @@ function animateCubeOverlay(overlay) {
     animate();
 }
 
-function animateGameWinLine(line) {
-    const duration = 2000;
-    const startTime = Date.now();
-
-    function animate() {
-        const elapsed = Date.now() - startTime;
-        const progress = (elapsed % duration) / duration;
-        
-        line.material.opacity = 0.5 + Math.sin(progress * Math.PI * 2) * 0.5;
-        line.material.emissiveIntensity = 0.5 + Math.sin(progress * Math.PI * 2) * 0.3;
-        
-        requestAnimationFrame(animate);
-    }
-    
-    animate();
-}
 
 // Camera controls
 function focusOnCube(cubeIndex) {
@@ -1213,47 +1181,9 @@ function rotateToLastMove() {
 
 // UI functions
 function updateUI() {
-    const statusElement = document.getElementById('status');
-    const activeCubeElement = document.getElementById('active-cube-info');
-    // Left status elements removed - only keep the X/O indicator
+    // Only update the current player indicator
     const playerIndicator = document.getElementById('current-player-indicator');
     const playerSymbol = document.getElementById('current-player-symbol');
-    // playerLabel element was removed from HTML
-    
-    if (gameState.gameOver) {
-        if (gameState.gameWinner) {
-            if (gameState.gameMode === 'single') {
-                statusElement.textContent = gameState.gameWinner === 'X' ? 'You win! 🎉' : 'Computer wins! 🤖';
-            } else if (gameState.gameMode === 'ai-vs-ai') {
-                statusElement.textContent = gameState.gameWinner === 'X' ? 'Computer 1 wins! 🤖' : 'Computer 2 wins! 🤖';
-            } else {
-                statusElement.textContent = `Player ${gameState.gameWinner} wins! 🎉`;
-            }
-        } else {
-            statusElement.textContent = "It's a draw! 🤝";
-        }
-        activeCubeElement.textContent = 'Game Over';
-        // Left status elements removed - just keep X/O indicator
-    } else {
-        if (gameState.gameMode === 'single') {
-            statusElement.textContent = gameState.currentPlayer === 'X' ? 'Your turn (X)' : "Computer's turn (O)";
-        } else if (gameState.gameMode === 'ai-vs-ai') {
-            statusElement.textContent = gameState.currentPlayer === 'X' ? "Computer 1's turn (X)" : "Computer 2's turn (O)";
-        } else {
-            statusElement.textContent = `Player ${gameState.currentPlayer}'s turn`;
-        }
-        
-        if (gameState.activeCubes === null) {
-            activeCubeElement.textContent = 'Play in any cube';
-        } else {
-            const layer = Math.floor(gameState.activeCubes / 9) + 1;
-            const cubeInLayer = (gameState.activeCubes % 9) + 1;
-            activeCubeElement.textContent = `Play in cube ${gameState.activeCubes + 1} (Layer ${layer}, Cube ${cubeInLayer})`;
-        }
-    }
-    
-    document.getElementById('player1-score').textContent = gameState.player1Score;
-    document.getElementById('player2-score').textContent = gameState.player2Score;
     
     // Update current player indicator
     if (playerIndicator && playerSymbol) {
@@ -1277,11 +1207,14 @@ function updateUI() {
 function updateMinimap() {
     const minimapCubes = document.querySelectorAll('.minimap-cube');
     minimapCubes.forEach((elem, idx) => {
-        elem.classList.remove('active', 'won-x', 'won-o');
+        elem.classList.remove('active', 'playable', 'won-x', 'won-o');
         
+        // Only highlight if a specific cube is active
         if (gameState.activeCubes === idx) {
+            // Single specific active cube - cyan outline
             elem.classList.add('active');
         }
+        // When activeCubes is null (can play anywhere), don't highlight any cubes
         
         if (gameState.cubeWinners[idx]) {
             elem.classList.add(`won-${gameState.cubeWinners[idx].toLowerCase()}`);
@@ -1354,7 +1287,8 @@ function resetGame() {
     
     // Reset game state
     initGameState();
-    gameState.gameMode = document.getElementById('player2-label').textContent === 'Computer' ? 'single' : 'two';
+    // Default to single player mode since we removed the UI labels
+    gameState.gameMode = 'single';
     
     // Reset cells
     cells.forEach(cell => {
@@ -1376,22 +1310,10 @@ function setupUIListeners() {
         btn.addEventListener('click', (e) => {
             gameState.gameMode = e.target.dataset.mode;
             document.getElementById('mode-selection').style.display = 'none';
-            document.getElementById('game-info').style.display = 'flex';
             document.getElementById('controls').style.display = 'flex';
             document.getElementById('instructions').style.display = 'block';
             document.getElementById('cube-minimap').style.display = 'grid';
             document.getElementById('left-panel').style.display = 'flex';
-            
-            if (gameState.gameMode === 'single') {
-                document.getElementById('player1-label').textContent = 'You';
-                document.getElementById('player2-label').textContent = 'Computer';
-            } else if (gameState.gameMode === 'ai-vs-ai') {
-                document.getElementById('player1-label').textContent = 'Computer 1';
-                document.getElementById('player2-label').textContent = 'Computer 2';
-            } else {
-                document.getElementById('player1-label').textContent = 'Player 1';
-                document.getElementById('player2-label').textContent = 'Player 2';
-            }
             
             updateUI();
             updateMinimap();
@@ -1410,7 +1332,6 @@ function setupUIListeners() {
     // Change mode button
     document.getElementById('change-mode-btn').addEventListener('click', () => {
         document.getElementById('mode-selection').style.display = 'block';
-        document.getElementById('game-info').style.display = 'none';
         document.getElementById('controls').style.display = 'none';
         document.getElementById('instructions').style.display = 'none';
         document.getElementById('cube-minimap').style.display = 'none';
