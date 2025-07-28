@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test ND</title>
+</head>
+<body>
+    <h1>Testing ND Engine</h1>
+    <div id="output"></div>
+    
+    <script src="nd-engine.js"></script>
+    <script>
+        console.log('Testing ND Engine...');
+        
+        try {
+            // Test if NDEngine is available
+            const engine = new NDEngine([3, 3, 3]);
+            const info = engine.getGameInfo();
+            
+            const output = document.getElementById('output');
+            output.innerHTML = `
+                <p>NDEngine loaded successfully!</p>
+                <p>Total cells: ${info.totalCells}</p>
+                <p>Winning combinations: ${info.numWinningCombinations}</p>
+                <p>Engine dimensions: ${JSON.stringify(info.dimensions)}</p>
+            `;
+            
+            console.log('Engine info:', info);
+            console.log('Sample winning combinations:', engine.winningCombinations.slice(0, 5));
+        } catch (error) {
+            console.error('Error loading NDEngine:', error);
+            document.getElementById('output').innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+        }
+    </script>
+</body>
+</html>

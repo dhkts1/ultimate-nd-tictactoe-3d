@@ -1,6 +1,6 @@
 # Ultimate N-Dimensional Tic-Tac-Toe 3D
 
-A comprehensive collection of Tic-Tac-Toe game variants with beautiful 3D graphics and AI opponents.
+A comprehensive collection of Tic-Tac-Toe game variants with beautiful 3D graphics and AI opponents, now featuring true N-dimensional gameplay!
 
 ## Features
 
@@ -8,6 +8,7 @@ A comprehensive collection of Tic-Tac-Toe game variants with beautiful 3D graphi
 - **Ultimate Tic-Tac-Toe** - 9 mini-boards with strategic gameplay
 - **3D Tic-Tac-Toe** - Full 3x3x3 cube with 76 winning combinations
 - **Ultimate 3D** - 9 cubes of 3x3x3 (243 total cells!)
+- **N-Dimensional Tic-Tac-Toe** - Play in 2D, 3D, 4D, or even 5D with intuitive visualization
 
 ## Game Modes
 
@@ -26,9 +27,14 @@ A comprehensive collection of Tic-Tac-Toe game variants with beautiful 3D graphi
 
 1. Open `index.html` in a modern web browser
 2. Select your preferred game variant
-3. Choose game mode (vs Computer, 2 Players, etc.)
-4. Click cells to make moves
-5. In 3D modes: drag to rotate, scroll to zoom
+3. For N-Dimensional games:
+   - Open `tictactoe-nd.html`
+   - Choose dimensions (2-5) and board size (3-5)
+   - Enable Ultimate mode for even more complexity
+4. Choose game mode (vs Computer, 2 Players, AI vs AI)
+5. Click cells to make moves
+6. In 3D modes: drag to rotate, scroll to zoom
+7. In 4D+: use dimension controls to navigate
 
 ## Controls
 
@@ -37,12 +43,33 @@ A comprehensive collection of Tic-Tac-Toe game variants with beautiful 3D graphi
 - **Scroll** - Zoom in/out
 - **Minimap** - Quick navigation in Ultimate 3D
 
+## N-Dimensional Features
+
+### 4D Visualization
+- All 3D "slices" displayed in a row
+- Each slice has its own colored wireframe boundary
+- Clear labels showing which 4D slice you're viewing
+- No sliders needed - all dimensions visible at once
+
+### 5D Visualization
+- 3D cubes arranged in a 2D grid (3x3 for default size)
+- First extra dimension determines row position
+- Second extra dimension determines column position
+- Slider to filter and view specific "planes" of the 5D space
+- Minimap overview showing all dimensions at once
+
+### Enhanced Visual Features
+- Colored outlines for each sub-cube in higher dimensions
+- Dimension labels clearly showing current view
+- Smooth transitions and animations
+- Minimap for overview navigation
+
 ## Coming Soon
 
-- Configurable board dimensions with sliders
-- N-dimensional gameplay (4D, 5D)
+- Even higher dimensions (6D+)
 - Difficulty levels for AI
 - Online multiplayer
+- Custom winning line lengths
 
 ## License
 
