@@ -547,6 +547,7 @@ function makeMove(cubeIndex, cellIndex) {
     // Update UI
     updateUI();
     updateActiveHighlights();
+    updateMinimap();
     
     // Auto-focus on next active cube if there's only one (slower)
     if (gameState.activeCubes !== null && !gameState.disableAutoFocus) {
@@ -1206,23 +1207,29 @@ function updateUI() {
 
 function updateMinimap() {
     const minimapCubes = document.querySelectorAll('.minimap-cube');
-    minimapCubes.forEach((elem, idx) => {
+    console.log(`Updating minimap. Active cubes: ${gameState.activeCubes}`);
+    
+    minimapCubes.forEach((elem) => {
+        const cubeIndex = parseInt(elem.getAttribute('data-cube'));
         elem.classList.remove('active', 'playable', 'won-x', 'won-o');
         
         // Only highlight if a specific cube is active
-        if (gameState.activeCubes === idx) {
+        if (gameState.activeCubes === cubeIndex) {
             // Single specific active cube - cyan outline
             elem.classList.add('active');
+            console.log(`Minimap highlighting cube ${cubeIndex}`);
         }
         // When activeCubes is null (can play anywhere), don't highlight any cubes
         
-        if (gameState.cubeWinners[idx]) {
-            elem.classList.add(`won-${gameState.cubeWinners[idx].toLowerCase()}`);
-            elem.setAttribute('data-winner', gameState.cubeWinners[idx]);
+        if (gameState.cubeWinners[cubeIndex]) {
+            elem.classList.add(`won-${gameState.cubeWinners[cubeIndex].toLowerCase()}`);
+            elem.setAttribute('data-winner', gameState.cubeWinners[cubeIndex]);
         } else {
             elem.setAttribute('data-winner', '');
         }
     });
+    
+    console.log(`Minimap updated. Found ${minimapCubes.length} cubes.`);
 }
 
 // Game end handlers
