@@ -9,29 +9,18 @@ let autoRotate = false;
 let winningLines = [];
 let activeHighlights = [];
 let cubeOverlays = [];
+let moveHistory = []; // Store recent moves for trail effect
+let cubesWithWinLines = new Set(); // Track which cubes already have winning lines
 
 // Constants
 const CUBE_SIZE = 3;
 const CELL_SIZE = 0.3;
-const CELL_SPACING = 0.1;
+const CELL_SPACING = 0.25;
 const CUBE_SPACING = 1.5;
 const TOTAL_CUBES = 27;
 
-// Colors
-const CUBE_COLORS = [
-    // Layer 1
-    0x667eea, 0x764ba2, 0x8b5cf6,
-    0x4ecdc4, 0x45b7d1, 0x3b82f6,
-    0xf093fb, 0xf5576c, 0xff6b6b,
-    // Layer 2
-    0x9d4edd, 0x7209b7, 0x560bad,
-    0x06ffa5, 0x4cc9f0, 0x7209b7,
-    0xfb8500, 0xff006e, 0xff5e5b,
-    // Layer 3
-    0x2d00f7, 0x6a00f4, 0x8900f2,
-    0x02c39a, 0x00a896, 0x028090,
-    0xffbe0b, 0xfb8500, 0xff006e
-];
+// Single color for all cubes
+const CUBE_COLOR = 0x444444; // Dark gray for all cubes
 
 // Generate winning combinations for 3x3x3
 const cubeWinningCombinations = [];
@@ -222,7 +211,8 @@ function initGameState() {
         gameOver: false,
         player1Score: 0,
         player2Score: 0,
-        gameMode: 'single'
+        gameMode: 'single',
+        disableAutoFocus: true
     };
 }
 
@@ -238,41 +228,37 @@ function init() {
 
     // Camera setup
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(20, 20, 20);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(20, 10, 20);
+    camera.lookAt(0, 1, 0);
 
     // Renderer setup
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = false;
     document.getElementById('canvas-container').appendChild(renderer.domElement);
 
     // Controls
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 15;
+    controls.minDistance = 3;
     controls.maxDistance = 60;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    // Lighting - brighter and more even
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight.position.set(20, 20, 10);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.camera.near = 0.1;
-    directionalLight.shadow.camera.far = 50;
-    directionalLight.shadow.camera.left = -20;
-    directionalLight.shadow.camera.right = 20;
-    directionalLight.shadow.camera.top = 20;
-    directionalLight.shadow.camera.bottom = -20;
-    scene.add(directionalLight);
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.6);
+    directionalLight1.position.set(20, 20, 10);
+    scene.add(directionalLight1);
 
-    const secondaryLight = new THREE.DirectionalLight(0x4ecdc4, 0.3);
-    secondaryLight.position.set(-10, -10, -10);
-    scene.add(secondaryLight);
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+    directionalLight2.position.set(-20, 10, 10);
+    scene.add(directionalLight2);
+
+    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.3);
+    directionalLight3.position.set(0, -10, -20);
+    scene.add(directionalLight3);
 
     // Raycaster for mouse interaction
     raycaster = new THREE.Raycaster();
@@ -281,8 +267,7 @@ function init() {
     // Create the 9 cubes
     createCubes();
 
-    // Create platform
-    createPlatform();
+    // Platform removed to avoid hiding bottom cubes
 
     // Event listeners
     window.addEventListener('resize', onWindowResize);
@@ -306,9 +291,11 @@ function createCubes() {
         const col = i % 3;
         
         const cubeX = (col - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
-        const cubeY = (layer - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3 + 3;
+        const cubeY = (layer - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3 + 1;
         const cubeZ = (row - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
         
+        // Debug cube positioning
+        console.log(`Cube ${i}: layer=${layer}, row=${row}, col=${col} -> position=(${cubeX.toFixed(2)}, ${cubeY.toFixed(2)}, ${cubeZ.toFixed(2)})`);
         
         cubeGroup.position.set(cubeX, cubeY, cubeZ);
         cubeGroup.userData = { cubeIndex: i };
@@ -320,13 +307,13 @@ function createCubes() {
                 for (let x = 0; x < 3; x++) {
                     const cellGeometry = new THREE.BoxGeometry(CELL_SIZE, CELL_SIZE, CELL_SIZE);
                     const cellMaterial = new THREE.MeshPhysicalMaterial({
-                        color: CUBE_COLORS[i],
-                        emissive: CUBE_COLORS[i],
-                        emissiveIntensity: 0.05,
-                        metalness: 0.2,
-                        roughness: 0.3,
+                        color: CUBE_COLOR,
+                        emissive: CUBE_COLOR,
+                        emissiveIntensity: 0.1,
+                        metalness: 0.3,
+                        roughness: 0.2,
                         transparent: true,
-                        opacity: 0.3,
+                        opacity: 0.6,
                         clearcoat: 1,
                         clearcoatRoughness: 0
                     });
@@ -335,8 +322,7 @@ function createCubes() {
                     cell.position.x = (x - 1) * (CELL_SIZE + CELL_SPACING);
                     cell.position.y = (y - 1) * (CELL_SIZE + CELL_SPACING);
                     cell.position.z = (z - 1) * (CELL_SIZE + CELL_SPACING);
-                    cell.castShadow = true;
-                    cell.receiveShadow = true;
+                    // Shadows disabled for better visibility
                     
                     const cellIndex = z * 9 + y * 3 + x;
                     cell.userData = { 
@@ -350,15 +336,6 @@ function createCubes() {
                     
                     cubeCells.push(cell);
                     cubeGroup.add(cell);
-                    
-                    // Add edge lines
-                    const edges = new THREE.EdgesGeometry(cellGeometry);
-                    const lineMaterial = new THREE.LineBasicMaterial({ 
-                        color: 0x222222,
-                        linewidth: 1
-                    });
-                    const line = new THREE.LineSegments(edges, lineMaterial);
-                    cell.add(line);
                 }
             }
         }
@@ -370,10 +347,10 @@ function createCubes() {
             3 * CELL_SIZE + 2.5 * CELL_SPACING
         );
         const boundaryMaterial = new THREE.MeshBasicMaterial({
-            color: CUBE_COLORS[i],
+            color: CUBE_COLOR,
             wireframe: true,
             transparent: true,
-            opacity: 0.1
+            opacity: 0.0
         });
         const boundary = new THREE.Mesh(boundaryGeometry, boundaryMaterial);
         cubeGroup.add(boundary);
@@ -386,76 +363,97 @@ function createCubes() {
     scene.add(cubeContainer);
 }
 
-// Create platform
-function createPlatform() {
-    const platformGeometry = new THREE.BoxGeometry(25, 0.2, 25);
-    const platformMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0x111111,
-        metalness: 0.8,
-        roughness: 0.2,
-        transparent: true,
-        opacity: 0
-    });
-    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-    platform.position.y = -2;
-    platform.receiveShadow = true;
-    scene.add(platform);
-}
+// Platform function removed - was hiding bottom cubes
 
 // Create 3D X mark
 function create3DX() {
     const group = new THREE.Group();
-    const barGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.8, CELL_SIZE * 0.1, CELL_SIZE * 0.1);
+    const barGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.9, CELL_SIZE * 0.15, CELL_SIZE * 0.15);
     const xMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0x667eea,
-        emissive: 0x667eea,
-        emissiveIntensity: 0.3,
-        metalness: 0.5,
-        roughness: 0.2
+        color: 0x00ff00, // Bright green for X
+        emissive: 0x00ff00,
+        emissiveIntensity: 0.8, // Much brighter
+        metalness: 0.1,
+        roughness: 0.1
     });
 
     const bar1 = new THREE.Mesh(barGeometry, xMaterial);
     bar1.rotation.z = Math.PI / 4;
-    bar1.castShadow = true;
 
     const bar2 = new THREE.Mesh(barGeometry, xMaterial);
     bar2.rotation.z = -Math.PI / 4;
-    bar2.castShadow = true;
 
     group.add(bar1);
     group.add(bar2);
+    
+    // Add glow effect
+    const glowGeometry = new THREE.BoxGeometry(CELL_SIZE * 1.1, CELL_SIZE * 0.2, CELL_SIZE * 0.2);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        transparent: true,
+        opacity: 0.3
+    });
+    
+    const glow1 = new THREE.Mesh(glowGeometry, glowMaterial);
+    glow1.rotation.z = Math.PI / 4;
+    const glow2 = new THREE.Mesh(glowGeometry, glowMaterial);
+    glow2.rotation.z = -Math.PI / 4;
+    
+    group.add(glow1);
+    group.add(glow2);
     
     return group;
 }
 
 // Create 3D O mark
 function create3DO() {
-    const torusGeometry = new THREE.TorusGeometry(CELL_SIZE * 0.3, CELL_SIZE * 0.08, 8, 16);
+    const torusGeometry = new THREE.TorusGeometry(CELL_SIZE * 0.35, CELL_SIZE * 0.12, 12, 20);
     const oMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0xf5576c,
-        emissive: 0xf5576c,
-        emissiveIntensity: 0.3,
-        metalness: 0.5,
-        roughness: 0.2
+        color: 0xff3333, // Bright red for O
+        emissive: 0xff3333,
+        emissiveIntensity: 0.8, // Much brighter
+        metalness: 0.1,
+        roughness: 0.1
     });
 
     const torus = new THREE.Mesh(torusGeometry, oMaterial);
-    torus.castShadow = true;
     
-    return torus;
+    // Add glow effect for O
+    const glowTorusGeometry = new THREE.TorusGeometry(CELL_SIZE * 0.4, CELL_SIZE * 0.15, 8, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff3333,
+        transparent: true,
+        opacity: 0.3
+    });
+    const glowTorus = new THREE.Mesh(glowTorusGeometry, glowMaterial);
+    
+    const group = new THREE.Group();
+    group.add(torus);
+    group.add(glowTorus);
+    
+    return group;
 }
 
 // Determine next cube based on cell position
 function determineNextCube(cellIndex) {
-    // Map cell position (0-26) to cube position (0-26)
-    // Cell layout: z * 9 + y * 3 + x
-    // Cube layout: layer * 9 + row * 3 + col
+    // Convert cell index back to x,y,z coordinates within the cube
     const cellZ = Math.floor(cellIndex / 9);
     const cellY = Math.floor((cellIndex % 9) / 3);
     const cellX = cellIndex % 3;
     
-    // Map to cube coordinates (cell position maps directly to cube position)
-    return cellZ * 9 + cellY * 3 + cellX;
+    // Map cell coordinates to cube coordinates:
+    // Cell x (left-right within cube) -> Cube col (left-right overall)
+    // Cell y (up-down within cube) -> Cube layer (bottom-top overall)  
+    // Cell z (front-back within cube) -> Cube row (front-back overall)
+    const targetCol = cellX;
+    const targetLayer = cellY;
+    const targetRow = cellZ;
+    
+    const targetCube = targetLayer * 9 + targetRow * 3 + targetCol;
+    
+    console.log(`Cell ${cellIndex} at (x=${cellX}, y=${cellY}, z=${cellZ}) -> Cube ${targetCube} at (layer=${targetLayer}, row=${targetRow}, col=${targetCol})`);
+    
+    return targetCube;
 }
 
 // Check if a move is valid
@@ -494,6 +492,20 @@ function makeMove(cubeIndex, cellIndex) {
     mark.position.copy(cell.position);
     cubes[cubeIndex].group.add(mark);
     marks.push(mark);
+    
+    // Add to move history for trail effect
+    moveHistory.unshift({
+        cubeIndex: cubeIndex,
+        cellIndex: cellIndex,
+        player: gameState.currentPlayer,
+        mark: mark,
+        timestamp: Date.now()
+    });
+    
+    // Keep only last 6 moves for trail
+    if (moveHistory.length > 6) {
+        moveHistory.pop();
+    }
     
     // Animate mark
     animateMark(mark);
@@ -536,18 +548,28 @@ function makeMove(cubeIndex, cellIndex) {
     updateUI();
     updateActiveHighlights();
     
+    // Auto-focus on next active cube if there's only one (slower)
+    if (gameState.activeCubes !== null && !gameState.disableAutoFocus) {
+        setTimeout(() => focusOnCube(gameState.activeCubes), 1200);
+    }
+    
     // Computer move
     if (!gameState.gameOver) {
         if (gameState.gameMode === 'single' && gameState.currentPlayer === 'O') {
-            setTimeout(computerMove, 500);
+            setTimeout(computerMove, 1200);
         } else if (gameState.gameMode === 'ai-vs-ai') {
-            setTimeout(computerMove, 1000); // 1 second delay for AI vs AI
+            setTimeout(computerMove, 1500); // 1.5 second delay for AI vs AI
         }
     }
 }
 
 // Check if a cube has a winner
 function checkCubeWinner(cubeIndex) {
+    // If this cube already has a winner, don't check again
+    if (gameState.cubeWinners[cubeIndex]) {
+        return true;
+    }
+    
     const board = gameState.boards[cubeIndex];
     
     for (const combination of cubeWinningCombinations) {
@@ -558,10 +580,38 @@ function checkCubeWinner(cubeIndex) {
             return board[z][y][x];
         });
         
-        if (positions[0] && positions[0] === positions[1] && positions[0] === positions[2]) {
-            // Create winning line for cube
-            const cells = combination.map(idx => cubes[cubeIndex].cells[idx]);
-            createCubeWinLine(cubeIndex, cells);
+        // Check for actual winning condition: all three positions must be the exact same player
+        const player = positions[0];
+        if ((player === 'X' || player === 'O') && 
+            positions[1] === player && positions[2] === player) {
+            
+            // Debug log to check if this is a valid win
+            console.log(`Valid win detected in cube ${cubeIndex} for player ${player}:`, positions, 'combination:', combination);
+            
+            // Yellow winning lines removed per user request
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Check cube winner for AI simulation (doesn't create visual lines)
+function checkCubeWinnerSimulation(cubeIndex) {
+    const board = gameState.boards[cubeIndex];
+    
+    for (const combination of cubeWinningCombinations) {
+        const positions = combination.map(idx => {
+            const z = Math.floor(idx / 9);
+            const y = Math.floor((idx % 9) / 3);
+            const x = idx % 3;
+            return board[z][y][x];
+        });
+        
+        // Check for actual winning condition: all three positions must be the exact same player
+        const player = positions[0];
+        if ((player === 'X' || player === 'O') && 
+            positions[1] === player && positions[2] === player) {
             return true;
         }
     }
@@ -575,6 +625,8 @@ function checkGameWinner() {
         const winners = combination.map(idx => gameState.cubeWinners[idx]);
         
         if (winners[0] && winners[0] === winners[1] && winners[0] === winners[2]) {
+            console.log(`Game won! Player ${winners[0]} won with cubes: ${combination.join(', ')}`);
+            console.log(`Cube winners state:`, gameState.cubeWinners);
             createGameWinLine(combination);
             return true;
         }
@@ -610,9 +662,17 @@ function showCubeWinner(cubeIndex) {
     // Create large X or O overlay
     const overlay = winner === 'X' ? create3DX() : create3DO();
     overlay.scale.set(5, 5, 5);
-    overlay.position.y = 2;
+    overlay.position.y = 0;
     cube.group.add(overlay);
     cubeOverlays.push(overlay);
+    
+    // Light up the entire cube in player's color
+    const cubeColor = winner === 'X' ? 0x0066ff : 0xff3333; // Blue for X, Red for O
+    cube.cells.forEach(cell => {
+        cell.material.emissive.setHex(cubeColor);
+        cell.material.emissiveIntensity = 0.3;
+        cell.material.opacity = 0.6;
+    });
     
     // Animate overlay
     animateCubeOverlay(overlay);
@@ -666,46 +726,28 @@ function createGameWinLine(cubeIndices) {
 // Update active cube highlights
 function updateActiveHighlights() {
     // Remove old highlights
-    activeHighlights.forEach(highlight => scene.remove(highlight));
+    activeHighlights.forEach(highlight => {
+        if (highlight.parent) {
+            highlight.parent.remove(highlight);
+        }
+    });
     activeHighlights = [];
     
-    // Dim all cubes
-    cubes.forEach(cube => {
-        cube.cells.forEach(cell => {
-            if (!cell.userData.occupied) {
-                cell.material.opacity = 0.1;
-                cell.material.emissiveIntensity = 0.01;
-            }
-        });
-    });
+    // No dimming - keep all cubes at normal visibility
     
-    // Highlight active cubes
-    if (gameState.activeCubes === null) {
-        // All non-won cubes are active
-        cubes.forEach((cube, idx) => {
-            if (!gameState.cubeWinners[idx]) {
-                highlightCube(idx);
-            }
-        });
-    } else {
-        // Only one cube is active
+    // Highlight active cubes - only show outline on the specific active cube
+    if (gameState.activeCubes !== null) {
+        // Only one cube is active - highlight it
         highlightCube(gameState.activeCubes);
     }
+    // If activeCubes is null (can play anywhere), don't show any outlines
 }
 
 // Highlight a cube
 function highlightCube(cubeIndex) {
     const cube = cubes[cubeIndex];
     
-    // Brighten cells
-    cube.cells.forEach(cell => {
-        if (!cell.userData.occupied) {
-            cell.material.opacity = 0.7;
-            cell.material.emissiveIntensity = 0.3;
-        }
-    });
-    
-    // Add clean frame border
+    // Only add wireframe border (no cell brightening)
     const frameGeometry = new THREE.BoxGeometry(
         3 * CELL_SIZE + 3 * CELL_SPACING,
         3 * CELL_SIZE + 3 * CELL_SPACING,
@@ -713,8 +755,8 @@ function highlightCube(cubeIndex) {
     );
     const frameEdges = new THREE.EdgesGeometry(frameGeometry);
     const frameMaterial = new THREE.LineBasicMaterial({
-        color: 0xf093fb,
-        linewidth: 3,
+        color: 0x00ffff, // Bright cyan for better visibility
+        linewidth: 4, // Thicker lines
         transparent: true,
         opacity: 0.9
     });
@@ -832,10 +874,14 @@ function findGameWinningMove(moves) {
     for (const move of moves) {
         // Simulate the move
         const oldPlayer = gameState.currentPlayer;
-        gameState.boards[move.cube][Math.floor(move.cell / 9)][Math.floor((move.cell % 9) / 3)][move.cell % 3] = oldPlayer;
+        const z = Math.floor(move.cell / 9);
+        const y = Math.floor((move.cell % 9) / 3);
+        const x = move.cell % 3;
         
-        // Check if this wins the cube
-        if (checkCubeWinner(move.cube)) {
+        gameState.boards[move.cube][z][y][x] = oldPlayer;
+        
+        // Check if this wins the cube using a separate function that doesn't create visual lines
+        if (checkCubeWinnerSimulation(move.cube)) {
             gameState.cubeWinners[move.cube] = oldPlayer;
             
             // Check if this wins the game
@@ -843,12 +889,12 @@ function findGameWinningMove(moves) {
             
             // Undo the move
             gameState.cubeWinners[move.cube] = null;
-            gameState.boards[move.cube][Math.floor(move.cell / 9)][Math.floor((move.cell % 9) / 3)][move.cell % 3] = null;
+            gameState.boards[move.cube][z][y][x] = null;
             
             if (gameWon) return move;
         } else {
             // Undo the move
-            gameState.boards[move.cube][Math.floor(move.cell / 9)][Math.floor((move.cell % 9) / 3)][move.cell % 3] = null;
+            gameState.boards[move.cube][z][y][x] = null;
         }
     }
     return null;
@@ -1046,23 +1092,40 @@ function animateGameWinLine(line) {
 // Camera controls
 function focusOnCube(cubeIndex) {
     const cube = cubes[cubeIndex];
-    const targetPosition = cube.group.position.clone();
-    targetPosition.add(new THREE.Vector3(3, 3, 3));
+    const cubePosition = cube.group.position.clone();
     
-    // Animate camera
-    const duration = 1000;
+    // Calculate cube's position in the 3x3x3 structure
+    const layer = Math.floor(cubeIndex / 9);
+    const row = Math.floor((cubeIndex % 9) / 3);
+    const col = cubeIndex % 3;
+    
+    // Use a fixed distance and angle for better viewing
+    const distance = 10; // Increased distance for better view
+    
+    // Simple diagonal view that works well for all cubes
+    const targetPosition = cubePosition.clone();
+    targetPosition.add(new THREE.Vector3(distance * 0.7, distance * 0.5, distance * 0.7));
+    
+    // Faster animation
+    const duration = 400;
     const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
     const startTime = Date.now();
     
     function animate() {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         
-        const easeInOut = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-        const p = easeInOut(progress);
+        // Faster easing
+        const easeOut = t => 1 - Math.pow(1 - t, 3);
+        const p = easeOut(progress);
         
+        // Animate camera position
         camera.position.lerpVectors(startPos, targetPosition, p);
-        camera.lookAt(cube.group.position);
+        
+        // Animate camera target (what it's looking at)
+        controls.target.lerpVectors(startTarget, cubePosition, p);
+        controls.update();
         
         if (progress < 1) {
             requestAnimationFrame(animate);
@@ -1075,7 +1138,9 @@ function focusOnCube(cubeIndex) {
 function viewAllCubes() {
     const duration = 1000;
     const startPos = camera.position.clone();
-    const targetPos = new THREE.Vector3(20, 20, 20);
+    const startTarget = controls.target.clone();
+    const targetPos = new THREE.Vector3(20, 10, 20);
+    const targetCenter = new THREE.Vector3(0, 1, 0); // Center of the 3D structure
     const startTime = Date.now();
     
     function animate() {
@@ -1086,7 +1151,57 @@ function viewAllCubes() {
         const p = easeInOut(progress);
         
         camera.position.lerpVectors(startPos, targetPos, p);
-        camera.lookAt(0, 0, 0);
+        controls.target.lerpVectors(startTarget, targetCenter, p);
+        controls.update();
+        
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        }
+    }
+    
+    animate();
+}
+
+// Rotate camera to view last move from behind on the same plane
+function rotateToLastMove() {
+    if (moveHistory.length === 0) return;
+    
+    const lastMove = moveHistory[0];
+    const cube = cubes[lastMove.cubeIndex];
+    const cubePosition = cube.group.position.clone();
+    
+    // Get the layer of the last move cube
+    const layer = Math.floor(lastMove.cubeIndex / 9);
+    const row = Math.floor((lastMove.cubeIndex % 9) / 3);
+    const col = lastMove.cubeIndex % 3;
+    
+    // Position camera behind the cube on the same Y plane (layer)
+    const distance = 8;
+    let targetPosition = cubePosition.clone();
+    
+    // Position behind the cube based on its row/col position
+    // For middle positions, slightly offset to avoid direct alignment
+    const behindX = col === 0 ? distance : col === 2 ? -distance : distance * 0.7;
+    const behindZ = row === 0 ? -distance : row === 2 ? distance : distance * 0.7;
+    
+    targetPosition.add(new THREE.Vector3(behindX, 0, behindZ));
+    
+    // Animate to position
+    const duration = 600;
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const startTime = Date.now();
+    
+    function animate() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        const easeOut = t => 1 - Math.pow(1 - t, 3);
+        const p = easeOut(progress);
+        
+        camera.position.lerpVectors(startPos, targetPosition, p);
+        controls.target.lerpVectors(startTarget, cubePosition, p);
+        controls.update();
         
         if (progress < 1) {
             requestAnimationFrame(animate);
@@ -1100,6 +1215,10 @@ function viewAllCubes() {
 function updateUI() {
     const statusElement = document.getElementById('status');
     const activeCubeElement = document.getElementById('active-cube-info');
+    // Left status elements removed - only keep the X/O indicator
+    const playerIndicator = document.getElementById('current-player-indicator');
+    const playerSymbol = document.getElementById('current-player-symbol');
+    // playerLabel element was removed from HTML
     
     if (gameState.gameOver) {
         if (gameState.gameWinner) {
@@ -1114,6 +1233,7 @@ function updateUI() {
             statusElement.textContent = "It's a draw! 🤝";
         }
         activeCubeElement.textContent = 'Game Over';
+        // Left status elements removed - just keep X/O indicator
     } else {
         if (gameState.gameMode === 'single') {
             statusElement.textContent = gameState.currentPlayer === 'X' ? 'Your turn (X)' : "Computer's turn (O)";
@@ -1134,6 +1254,24 @@ function updateUI() {
     
     document.getElementById('player1-score').textContent = gameState.player1Score;
     document.getElementById('player2-score').textContent = gameState.player2Score;
+    
+    // Update current player indicator
+    if (playerIndicator && playerSymbol) {
+        console.log('Updating player indicator to:', gameState.currentPlayer);
+        playerSymbol.textContent = gameState.currentPlayer;
+        
+        // Remove previous classes
+        playerIndicator.classList.remove('player-x', 'player-o');
+        
+        if (gameState.gameOver) {
+            playerIndicator.style.display = 'none';
+        } else {
+            playerIndicator.style.display = 'flex';
+            playerIndicator.classList.add(gameState.currentPlayer === 'X' ? 'player-x' : 'player-o');
+        }
+    } else {
+        console.log('Player indicator elements not found:', {playerIndicator, playerSymbol});
+    }
 }
 
 function updateMinimap() {
@@ -1208,6 +1346,12 @@ function resetGame() {
     activeHighlights.forEach(highlight => highlight.parent.remove(highlight));
     activeHighlights = [];
     
+    // Clear move history
+    moveHistory = [];
+    
+    // Clear cubes with win lines tracking  
+    cubesWithWinLines.clear();
+    
     // Reset game state
     initGameState();
     gameState.gameMode = document.getElementById('player2-label').textContent === 'Computer' ? 'single' : 'two';
@@ -1236,7 +1380,7 @@ function setupUIListeners() {
             document.getElementById('controls').style.display = 'flex';
             document.getElementById('instructions').style.display = 'block';
             document.getElementById('cube-minimap').style.display = 'grid';
-            document.getElementById('camera-controls').style.display = 'block';
+            document.getElementById('left-panel').style.display = 'flex';
             
             if (gameState.gameMode === 'single') {
                 document.getElementById('player1-label').textContent = 'You';
@@ -1270,7 +1414,7 @@ function setupUIListeners() {
         document.getElementById('controls').style.display = 'none';
         document.getElementById('instructions').style.display = 'none';
         document.getElementById('cube-minimap').style.display = 'none';
-        document.getElementById('camera-controls').style.display = 'none';
+        document.getElementById('left-panel').style.display = 'none';
         document.getElementById('help-panel').style.display = 'none';
         gameState.player1Score = 0;
         gameState.player2Score = 0;
@@ -1287,49 +1431,19 @@ function setupUIListeners() {
     document.getElementById('auto-rotate-btn').addEventListener('click', () => {
         autoRotate = !autoRotate;
         controls.autoRotate = autoRotate;
-        controls.autoRotateSpeed = 1;
+        controls.autoRotateSpeed = 0.5; // Slower rotation
         document.getElementById('auto-rotate-btn').textContent = autoRotate ? 'Stop Rotation' : 'Auto Rotate';
     });
 
-    // Camera controls
-    document.getElementById('view-all-btn').addEventListener('click', viewAllCubes);
+    // Auto focus button - initialize with correct text
+    const autoFocusBtn = document.getElementById('disable-auto-focus-btn');
+    autoFocusBtn.textContent = gameState.disableAutoFocus ? 'Auto Focus: OFF' : 'Auto Focus: ON';
     
-    document.getElementById('focus-active-btn').addEventListener('click', () => {
-        if (gameState.activeCubes !== null) {
-            focusOnCube(gameState.activeCubes);
-        }
+    autoFocusBtn.addEventListener('click', () => {
+        gameState.disableAutoFocus = !gameState.disableAutoFocus;
+        autoFocusBtn.textContent = gameState.disableAutoFocus ? 'Auto Focus: OFF' : 'Auto Focus: ON';
     });
 
-    document.getElementById('rotate-view-btn').addEventListener('click', () => {
-        const angle = Math.PI / 2;
-        const radius = 20;
-        const currentAngle = Math.atan2(camera.position.z, camera.position.x);
-        const newAngle = currentAngle + angle;
-        
-        const targetPos = new THREE.Vector3(
-            radius * Math.cos(newAngle),
-            camera.position.y,
-            radius * Math.sin(newAngle)
-        );
-        
-        const duration = 500;
-        const startPos = camera.position.clone();
-        const startTime = Date.now();
-        
-        function animate() {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            
-            camera.position.lerpVectors(startPos, targetPos, progress);
-            camera.lookAt(0, 0, 0);
-            
-            if (progress < 1) {
-                requestAnimationFrame(animate);
-            }
-        }
-        
-        animate();
-    });
 
     // Minimap clicks
     document.querySelectorAll('.minimap-cube').forEach((elem, idx) => {
@@ -1346,11 +1460,54 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// Update move trail highlighting
+function updateMoveTrail() {
+    const now = Date.now();
+    
+    moveHistory.forEach((move, index) => {
+        const age = now - move.timestamp;
+        const maxAge = 10000; // 10 seconds
+        
+        if (age > maxAge) return;
+        
+        // Calculate intensity based on recency (0 = most recent, higher = older)
+        const intensity = Math.max(0, 1 - (index * 0.15) - (age / maxAge * 0.3));
+        
+        if (move.mark && move.mark.material) {
+            // Apply trail effect based on player
+            if (move.player === 'X') {
+                move.mark.material.emissive.setHex(0x00ff00); // Green for X
+                move.mark.material.emissiveIntensity = intensity * 0.8;
+            } else {
+                move.mark.material.emissive.setHex(0xff3333); // Red for O
+                move.mark.material.emissiveIntensity = intensity * 0.8;
+            }
+        }
+        
+        // Highlight the cube containing recent moves
+        const cube = cubes[move.cubeIndex];
+        if (cube && index < 3) { // Only highlight last 3 moves' cubes
+            cube.cells.forEach(cell => {
+                if (!cell.userData.occupied) {
+                    const baseOpacity = cell.material.opacity;
+                    cell.material.emissiveIntensity = Math.max(
+                        cell.material.emissiveIntensity,
+                        intensity * 0.05
+                    );
+                }
+            });
+        }
+    });
+}
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
     controls.update();
+    
+    // Update move trail
+    updateMoveTrail();
     
     // Animate marks
     marks.forEach((mark, index) => {
@@ -1358,9 +1515,9 @@ function animate() {
         mark.rotation.x += 0.005;
     });
     
-    // Animate active highlights
+    // Keep active highlights static at 75% opacity
     activeHighlights.forEach(highlight => {
-        highlight.material.opacity = 0.3 + Math.sin(Date.now() * 0.003) * 0.3;
+        highlight.material.opacity = 0.75;
     });
     
     // Pulse hovered cell
