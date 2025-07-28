@@ -49,13 +49,17 @@ class NDTicTacToe {
     }
     
     init() {
+        console.log('Initializing NDTicTacToe with config:', this.config);
+        
         // Create dimension array for engine
         const dimensions = new Array(this.config.dimensions).fill(this.config.size);
         if (this.config.ultimateMode) {
             dimensions.unshift(this.config.size); // Add extra dimension for ultimate mode
         }
         
+        console.log('Creating NDEngine with dimensions:', dimensions);
         this.engine = new NDEngine(dimensions);
+        console.log('Engine created:', this.engine);
         this.board = new Array(this.engine.totalCells).fill(null);
         
         this.setupThreeJS();
@@ -90,12 +94,27 @@ class NDTicTacToe {
         
         // Renderer setup
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setSize(window.innerWidth, window.innerHeight - 80);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         
         const container = document.getElementById('game-container');
-        container.appendChild(this.renderer.domElement);
+        console.log('Appending renderer to container:', container);
+        
+        // Insert the canvas after the game-ui but before other elements
+        const gameUI = container.querySelector('.game-ui');
+        if (gameUI && gameUI.nextSibling) {
+            container.insertBefore(this.renderer.domElement, gameUI.nextSibling);
+        } else {
+            container.appendChild(this.renderer.domElement);
+        }
+        
+        // Style the canvas
+        this.renderer.domElement.style.position = 'absolute';
+        this.renderer.domElement.style.top = '80px'; // Below the game UI
+        this.renderer.domElement.style.left = '0';
+        this.renderer.domElement.style.width = '100%';
+        this.renderer.domElement.style.height = 'calc(100% - 80px)';
         
         // Controls
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
@@ -152,11 +171,13 @@ class NDTicTacToe {
     }
     
     createBoard() {
+        console.log('Creating board with', this.engine.totalCells, 'cells');
         const cellSize = 0.8;
         const spacing = 1.2;
         
         // Create grid helper for reference
         this.createGridHelper();
+        console.log('Grid helper created');
         
         // Create cells
         for (let i = 0; i < this.engine.totalCells; i++) {
@@ -863,7 +884,7 @@ class NDTicTacToe {
     
     onWindowResize() {
         const width = window.innerWidth;
-        const height = window.innerHeight;
+        const height = window.innerHeight - 80; // Account for game UI
         
         if (this.camera instanceof THREE.PerspectiveCamera) {
             this.camera.aspect = width / height;
@@ -966,3 +987,7 @@ function initializeNDGame(config) {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { NDTicTacToe, initializeNDGame };
 }
+
+// Export to window for browser usage
+window.NDTicTacToe = NDTicTacToe;
+window.initializeNDGame = initializeNDGame;
