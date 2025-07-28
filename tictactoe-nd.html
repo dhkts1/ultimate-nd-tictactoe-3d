@@ -641,48 +641,79 @@
         function setupDimensionControls() {
             dimensionSlidersContainer.innerHTML = '';
             
-            if (config.dimensions >= 4) {
-                // Add sliders for higher dimensions
-                for (let d = 4; d <= config.dimensions; d++) {
-                    const sliderDiv = document.createElement('div');
-                    sliderDiv.className = 'dimension-slider';
-                    sliderDiv.innerHTML = `
-                        <div class="slider-label">
-                            <span>Dimension ${d} Slice</span>
-                            <span class="slider-value" id="dim${d}-value">1</span>
-                        </div>
-                        <input type="range" id="dim${d}-slider" min="1" max="${config.size}" value="1" step="1">
-                    `;
-                    dimensionSlidersContainer.appendChild(sliderDiv);
-                    
-                    // Add event listener
-                    const slider = sliderDiv.querySelector(`#dim${d}-slider`);
-                    const valueSpan = sliderDiv.querySelector(`#dim${d}-value`);
-                    slider.addEventListener('input', (e) => {
-                        valueSpan.textContent = e.target.value;
-                        if (window.gameInstance) {
-                            window.gameInstance.updateDimensionSlice(d, parseInt(e.target.value) - 1);
-                        }
-                    });
-                }
+            if (config.dimensions === 5) {
+                // For 5D, only add a slider for the 5th dimension (plane selection)
+                const sliderDiv = document.createElement('div');
+                sliderDiv.className = 'dimension-slider';
+                sliderDiv.innerHTML = `
+                    <div class="slider-label">
+                        <span>View Plane (5th Dimension)</span>
+                        <span class="slider-value" id="dim5-value">All</span>
+                    </div>
+                    <input type="range" id="dim5-slider" min="0" max="${config.size}" value="0" step="1">
+                `;
+                dimensionSlidersContainer.appendChild(sliderDiv);
+                
+                // Add event listener
+                const slider = sliderDiv.querySelector('#dim5-slider');
+                const valueSpan = sliderDiv.querySelector('#dim5-value');
+                slider.addEventListener('input', (e) => {
+                    const value = parseInt(e.target.value);
+                    valueSpan.textContent = value === 0 ? 'All' : `Plane ${value}`;
+                    if (window.gameInstance) {
+                        window.gameInstance.updateDimensionSlice(5, value - 1);
+                    }
+                });
+                
+                // Add info text
+                const infoDiv = document.createElement('div');
+                infoDiv.style.marginTop = '15px';
+                infoDiv.style.fontSize = '0.85rem';
+                infoDiv.style.opacity = '0.7';
+                infoDiv.innerHTML = `
+                    <p>4D: All slices shown in a row</p>
+                    <p>5D: Use slider to view planes</p>
+                `;
+                dimensionSlidersContainer.appendChild(infoDiv);
+            } else if (config.dimensions === 4) {
+                // For 4D, just show info
+                const infoDiv = document.createElement('div');
+                infoDiv.style.fontSize = '0.85rem';
+                infoDiv.style.opacity = '0.7';
+                infoDiv.innerHTML = `<p>All 4D slices are visible as separate cubes</p>`;
+                dimensionSlidersContainer.appendChild(infoDiv);
             }
         }
 
-        // Placeholder for game initialization
+        // This function will call the game initialization
         function initializeNDGame(config) {
-            console.log('Initializing N-D game with config:', config);
-            // This would be implemented in a separate tictactoe-nd.js file
-            // For now, just show a message
-            gameStatus.textContent = `${config.dimensions}D Game Started!`;
+            // The real initializeNDGame is defined in tictactoe-nd.js
+            if (typeof window.NDTicTacToe !== 'undefined') {
+                // Clean up any existing game instance
+                if (window.gameInstance) {
+                    window.gameInstance.dispose();
+                }
+                
+                // Create new game instance
+                window.gameInstance = new window.NDTicTacToe(config);
+                
+                // Update UI based on game mode
+                const status = document.getElementById('game-status');
+                if (config.gameMode === 'vs-computer') {
+                    status.textContent = 'Your Turn (X)';
+                } else if (config.gameMode === 'two-players') {
+                    status.textContent = 'Player X\'s Turn';
+                } else if (config.gameMode === 'ai-vs-ai') {
+                    status.textContent = 'AI Battle Started!';
+                }
+            } else {
+                console.error('NDTicTacToe class not found!');
+                gameStatus.textContent = 'Error: Game failed to load';
+            }
         }
 
         // Initial display update
         updateConfigDisplay();
     </script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="nd-engine.js"></script>
-    <script src="tictactoe-nd.js"></script>
 </body>
 </html>
