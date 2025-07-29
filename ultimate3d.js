@@ -1780,16 +1780,32 @@ function makeAllCubesTransparent() {
         });
     });
     
-    // Also make the marks more transparent
+    // Make the small marks (in cells) more transparent but still visible
     marks.forEach(mark => {
         if (mark.material) {
-            mark.material.opacity = 0.3;
+            mark.material.opacity = 0.5; // 50% opacity - still visible but subdued
             mark.material.transparent = true;
         } else if (mark.children) {
             // For X marks which are groups
             mark.children.forEach(child => {
                 if (child.material) {
-                    child.material.opacity = 0.3;
+                    child.material.opacity = 0.5; // 50% opacity
+                    child.material.transparent = true;
+                }
+            });
+        }
+    });
+    
+    // Make the medium cube winner overlays more transparent
+    cubeOverlays.forEach(overlay => {
+        if (overlay.material) {
+            overlay.material.opacity = 0.3; // 30% opacity - more transparent than small marks
+            overlay.material.transparent = true;
+        } else if (overlay.children) {
+            // For X overlays which are groups
+            overlay.children.forEach(child => {
+                if (child.material) {
+                    child.material.opacity = 0.3; // 30% opacity
                     child.material.transparent = true;
                 }
             });
@@ -1847,6 +1863,21 @@ function showGameWinner() {
     const winnerMark = gameState.gameWinner === 'X' ? create3DX() : create3DO();
     winnerMark.scale.set(20, 20, 20); // Huge scale
     winnerMark.position.set(0, 5, 0); // Above the game
+    
+    // Ensure the big winner mark stays fully opaque
+    if (winnerMark.material) {
+        winnerMark.material.opacity = 1.0; // Full opacity
+        winnerMark.material.transparent = false;
+    } else if (winnerMark.children) {
+        // For X marks which are groups
+        winnerMark.children.forEach(child => {
+            if (child.material) {
+                child.material.opacity = 1.0; // Full opacity
+                child.material.transparent = false;
+            }
+        });
+    }
+    
     scene.add(winnerMark);
     
     // Animate the winner mark
