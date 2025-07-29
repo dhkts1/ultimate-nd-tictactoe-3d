@@ -13,7 +13,7 @@ let moveHistory = []; // Store recent moves for trail effect
 let cubesWithWinLines = new Set(); // Track which cubes already have winning lines
 let aiPaused = false; // Track if AI vs AI is paused
 let cameraAnimating = false; // Track if camera is animating
-let gameSpeed = 20; // Game speed (0-100 scale, where 20 is normal speed)
+let animationSpeed = 100; // Animation speed percentage (50-200%)
 let frameCount = 0;
 let lastFPSUpdate = Date.now();
 let currentFPS = 0;
@@ -41,14 +41,13 @@ const CELL_SIZE = 0.4 * sizeFactor; // Bigger cells on smaller screens
 const CELL_SPACING = 0.25;
 const CUBE_SPACING = 1.0 / sizeFactor; // Minimal spacing between cubes
 const TOTAL_CUBES = 27;
-const DEBUG_MODE = false; // Set to true to enable console logging
+const DEBUG_MODE = true; // Set to true to enable console logging
 
 // Convert speed (0-100) to delay multiplier
 // 0 = very slow (10x delay), 20 = normal slow (2x), 50 = normal (1x), 100 = very fast (0.2x delay)
 function getSpeedMultiplier() {
-    if (gameSpeed === 0) return 10;
-    if (gameSpeed <= 50) return 2 - (gameSpeed / 50) * 1; // 2x to 1x
-    return 1 - ((gameSpeed - 50) / 50) * 0.8; // 1x to 0.2x
+    // For AI move delays, just return 1 (normal speed)
+    return 1;
 }
 
 // Single color for all cubes
@@ -553,9 +552,9 @@ function create3DX() {
     const group = new THREE.Group();
     const barGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.9, CELL_SIZE * 0.15, CELL_SIZE * 0.15);
     const xMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0x008800, // Darker green for X
-        emissive: 0x00aa00,
-        emissiveIntensity: 0.4, // Less bright
+        color: 0x00ff00, // Bright green for X
+        emissive: 0x00ff00,
+        emissiveIntensity: 0.6, // Brighter
         metalness: 0.1,
         roughness: 0.1,
         transparent: false // Fully opaque
@@ -593,9 +592,9 @@ function create3DX() {
 function create3DO() {
     const torusGeometry = new THREE.TorusGeometry(CELL_SIZE * 0.35, CELL_SIZE * 0.12, 12, 20);
     const oMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0xcc0000, // Darker red for O
-        emissive: 0xaa0000,
-        emissiveIntensity: 0.4, // Less bright
+        color: 0xff0000, // Bright red for O
+        emissive: 0xff0000,
+        emissiveIntensity: 0.6, // Brighter
         metalness: 0.1,
         roughness: 0.1,
         transparent: false // Fully opaque
@@ -740,20 +739,23 @@ function makeMove(cubeIndex, cellIndex) {
     updateActiveHighlights();
     updateMinimap();
     
-    // Auto-focus on active cube
+    // Auto-focus on active cube (only if a specific cube is active)
     if (gameState.activeCubes !== null && !gameState.disableAutoFocus) {
         focusOnCube(gameState.activeCubes); // Focus on the active cube
+    } else if (gameState.activeCubes === null && !gameState.disableAutoFocus) {
+        // When player can play anywhere, focus on middle cube or keep current view
+        // Don't change camera when multiple cubes are playable
     }
     
     // Computer move
     if (!gameState.gameOver) {
         if (DEBUG_MODE) console.log('Checking for computer move. Mode:', gameState.gameMode, 'Player:', gameState.currentPlayer, 'AI Paused:', aiPaused);
         if (gameState.gameMode === 'single' && gameState.currentPlayer === 'O') {
-            setTimeout(computerMove, 1200 * getSpeedMultiplier());
+            setTimeout(computerMove, 1200 * (100 / animationSpeed));
         } else if (gameState.gameMode === 'ai-vs-ai' && !aiPaused) {
             // Continue AI vs AI game
             if (DEBUG_MODE) console.log('Scheduling AI vs AI move');
-            setTimeout(computerMove, 1500 * getSpeedMultiplier()); // 1.5 second delay for AI vs AI
+            setTimeout(computerMove, 1500 * (100 / animationSpeed)); // Scaled delay for AI vs AI
         }
     }
 }
@@ -861,11 +863,11 @@ function showCubeWinner(cubeIndex) {
     cubeOverlays.push(overlay);
     
     // Light up the entire cube in player's color
-    const cubeColor = winner === 'X' ? 0x0066ff : 0xff3333; // Blue for X, Red for O
+    const cubeColor = winner === 'X' ? 0x00ff00 : 0xff3333; // Green for X, Red for O
     cube.cells.forEach(cell => {
         cell.material.emissive.setHex(cubeColor);
-        cell.material.emissiveIntensity = 0.3;
-        cell.material.opacity = 0.6;
+        cell.material.emissiveIntensity = 0.2;
+        cell.material.opacity = 0.3; // More see-through
     });
     
     // Animate overlay
@@ -908,13 +910,19 @@ function updateActiveHighlights() {
     
     if (DEBUG_MODE) console.log('Active cubes:', gameState.activeCubes);
     
-    // Highlight active cubes - only show outline on the specific active cube
+    // Highlight active cubes
     if (gameState.activeCubes !== null) {
         // Only one cube is active - highlight it
         if (DEBUG_MODE) console.log('Highlighting cube:', gameState.activeCubes);
         highlightCube(gameState.activeCubes);
     } else {
-        if (DEBUG_MODE) console.log('No cube highlighted - can play anywhere');
+        // Player can play in any non-won cube - highlight all available cubes
+        if (DEBUG_MODE) console.log('Player can play anywhere - highlighting all non-won cubes');
+        for (let i = 0; i < TOTAL_CUBES; i++) {
+            if (!gameState.cubeWinners[i]) {
+                highlightCube(i);
+            }
+        }
     }
 }
 
@@ -995,7 +1003,7 @@ function computerMove() {
     if (cameraAnimating) {
         // Check again in a bit
         if (!gameState.gameOver) {
-            setTimeout(computerMove, 200 * getSpeedMultiplier());
+            setTimeout(computerMove, 200 * (100 / animationSpeed));
         }
         return;
     }
@@ -1364,10 +1372,11 @@ function focusOnCenter() {
         if (progress < 1) {
             requestAnimationFrame(animate);
         } else {
-            // Animation complete - add 300ms delay before allowing moves
+            // Animation complete - add small delay before allowing moves (scaled by animation speed)
+            const cooldownDelay = 50 * (100 / animationSpeed); // Very short delay that scales with speed
             setTimeout(() => {
                 cameraAnimating = false;
-            }, 300);
+            }, cooldownDelay);
         }
     }
     
@@ -1377,6 +1386,12 @@ function focusOnCenter() {
 function focusOnCube(cubeIndex) {
     if (DEBUG_MODE) console.log('focusOnCube called for cube:', cubeIndex, 'Auto-focus disabled?', gameState.disableAutoFocus);
     if (gameState.disableAutoFocus) return;
+    
+    // Safety check for null cube index
+    if (cubeIndex === null || cubeIndex === undefined) {
+        if (DEBUG_MODE) console.log('No specific cube to focus on (player can play anywhere)');
+        return;
+    }
     
     // Don't start a new animation if one is already in progress
     if (cameraAnimating) {
@@ -1480,11 +1495,33 @@ function focusOnCube(cubeIndex) {
         return;
     }
     
-    // Speed in radians per second (45 degrees per second)
-    const rotationSpeed = Math.PI / 4;
+    // Speed in radians per second (45 degrees per second), adjusted by animation speed
+    const rotationSpeed = Math.PI / 4 * (animationSpeed / 100);
     const duration = (angle / rotationSpeed) * 1000; // Convert to milliseconds
     
     const startTime = Date.now();
+    
+    // Convert positions to spherical coordinates for smooth interpolation
+    const startOffset = new THREE.Vector3().subVectors(startPos, middleCubePos);
+    const targetOffset = new THREE.Vector3().subVectors(targetCameraPos, middleCubePos);
+    
+    // Calculate spherical coordinates
+    const startR = startOffset.length();
+    const targetR = targetOffset.length();
+    
+    // Azimuthal angle (horizontal rotation around Y axis)
+    const startTheta = Math.atan2(startOffset.x, startOffset.z);
+    const targetTheta = Math.atan2(targetOffset.x, targetOffset.z);
+    
+    // Polar angle (vertical tilt from Y axis)
+    const startPhi = Math.acos(Math.max(-1, Math.min(1, startOffset.y / startR)));
+    const targetPhi = Math.acos(Math.max(-1, Math.min(1, targetOffset.y / targetR)));
+    
+    // Handle angle wrapping for shortest path
+    let deltaTheta = targetTheta - startTheta;
+    // Normalize to [-PI, PI]
+    while (deltaTheta > Math.PI) deltaTheta -= 2 * Math.PI;
+    while (deltaTheta < -Math.PI) deltaTheta += 2 * Math.PI;
     
     function animate() {
         const elapsed = Date.now() - startTime;
@@ -1494,87 +1531,25 @@ function focusOnCube(cubeIndex) {
         const easeOut = t => 1 - Math.pow(1 - t, 3);
         const p = easeOut(progress);
         
-        // Animate camera position along the sphere surface
-        // Use spherical interpolation to maintain constant radius
-        const startRadius = startPos.distanceTo(middleCubePos);
-        const targetRadius = targetCameraPos.distanceTo(middleCubePos);
-        const currentRadius = startRadius + (targetRadius - startRadius) * p;
+        // Interpolate spherical coordinates
+        const currentR = startR + (targetR - startR) * p;
+        const currentTheta = startTheta + deltaTheta * p;
+        const currentPhi = startPhi + (targetPhi - startPhi) * p;
         
-        // Normalize positions relative to center and interpolate
-        const startDir = new THREE.Vector3().subVectors(startPos, middleCubePos);
-        const targetDir = new THREE.Vector3().subVectors(targetCameraPos, middleCubePos);
+        // Convert back to Cartesian coordinates
+        const sinPhi = Math.sin(currentPhi);
+        const cosPhi = Math.cos(currentPhi);
+        const sinTheta = Math.sin(currentTheta);
+        const cosTheta = Math.cos(currentTheta);
         
-        // Safety check for zero vectors
-        if (startDir.lengthSq() < 0.001 || targetDir.lengthSq() < 0.001) {
-            console.error('Invalid camera direction vectors');
-            cameraAnimating = false;
-            return;
-        }
+        const currentDir = new THREE.Vector3(
+            sinPhi * sinTheta,
+            cosPhi,
+            sinPhi * cosTheta
+        );
         
-        startDir.normalize();
-        targetDir.normalize();
-        
-        // Proper spherical interpolation to avoid jumping
-        const currentDir = new THREE.Vector3();
-        
-        // Use spherical linear interpolation (slerp) for smooth rotation
-        const dot = startDir.dot(targetDir);
-        
-        // Clamp dot product to valid range
-        const clampedDot = Math.max(-1, Math.min(1, dot));
-        const theta = Math.acos(clampedDot);
-        
-        // If angle is very small, use simple lerp
-        if (theta < 0.001) {
-            currentDir.copy(startDir);
-        } else if (Math.abs(theta - Math.PI) < 0.001) {
-            // Vectors are opposite (180 degrees)
-            // Find a perpendicular vector to interpolate through
-            const perpendicular = new THREE.Vector3();
-            if (Math.abs(startDir.x) < 0.9) {
-                perpendicular.crossVectors(startDir, new THREE.Vector3(1, 0, 0));
-            } else {
-                perpendicular.crossVectors(startDir, new THREE.Vector3(0, 1, 0));
-            }
-            perpendicular.normalize();
-            
-            // Use two-step interpolation through perpendicular
-            const halfwayAngle = Math.PI / 2;
-            if (p < 0.5) {
-                // First half: from start to perpendicular
-                const localP = p * 2;
-                const sinTheta = Math.sin(halfwayAngle);
-                currentDir.copy(startDir).multiplyScalar(Math.sin(halfwayAngle * (1 - localP)) / sinTheta);
-                currentDir.add(perpendicular.clone().multiplyScalar(Math.sin(halfwayAngle * localP) / sinTheta));
-            } else {
-                // Second half: from perpendicular to target
-                const localP = (p - 0.5) * 2;
-                const sinTheta = Math.sin(halfwayAngle);
-                currentDir.copy(perpendicular).multiplyScalar(Math.sin(halfwayAngle * (1 - localP)) / sinTheta);
-                currentDir.add(targetDir.clone().multiplyScalar(Math.sin(halfwayAngle * localP) / sinTheta));
-            }
-        } else {
-            // Normal slerp
-            const sinTheta = Math.sin(theta);
-            const a = Math.sin((1 - p) * theta) / sinTheta;
-            const b = Math.sin(p * theta) / sinTheta;
-            currentDir.copy(startDir).multiplyScalar(a);
-            currentDir.add(targetDir.clone().multiplyScalar(b));
-        }
-        
-        currentDir.normalize();
-        
-        // Set camera position at constant radius
-        if (DEBUG_MODE && progress > 0.95) {
-            console.log('Camera animation near complete:', {
-                currentRadius,
-                currentDir: currentDir.toArray(),
-                middleCubePos: middleCubePos.toArray(),
-                cameraPosBefore: camera.position.toArray()
-            });
-        }
-        
-        camera.position.copy(middleCubePos).addScaledVector(currentDir, currentRadius);
+        // Set camera position using spherical coordinates
+        camera.position.copy(middleCubePos).addScaledVector(currentDir, currentR);
         
         // Safety check for camera position
         if (!isFinite(camera.position.x) || !isFinite(camera.position.y) || !isFinite(camera.position.z)) {
@@ -1589,12 +1564,13 @@ function focusOnCube(cubeIndex) {
         if (progress < 1) {
             requestAnimationFrame(animate);
         } else {
-            // Animation complete - add 300ms delay before allowing moves
-            if (DEBUG_MODE) console.log('Camera animation complete, waiting 300ms before allowing moves');
+            // Animation complete - add small delay before allowing moves (scaled by animation speed)
+            const cooldownDelay = 50 * (100 / animationSpeed); // Very short delay that scales with speed
+            if (DEBUG_MODE) console.log(`Camera animation complete, waiting ${cooldownDelay}ms before allowing moves`);
             setTimeout(() => {
                 cameraAnimating = false;
                 if (DEBUG_MODE) console.log('Camera cooldown complete, moves allowed');
-            }, 300);
+            }, cooldownDelay);
         }
     }
     
@@ -1918,7 +1894,7 @@ function setupUIListeners() {
         
         // If resuming, trigger next move
         if (!aiPaused && gameState.gameMode === 'ai-vs-ai' && !gameState.gameOver) {
-            setTimeout(computerMove, 500 * getSpeedMultiplier());
+            setTimeout(computerMove, 500 * (100 / animationSpeed));
         }
     });
     
@@ -1928,8 +1904,8 @@ function setupUIListeners() {
     const speedDisplay = document.getElementById('speed-display');
     
     speedSlider.addEventListener('input', (e) => {
-        gameSpeed = parseInt(e.target.value);
-        speedDisplay.textContent = gameSpeed;
+        animationSpeed = parseInt(e.target.value);
+        speedDisplay.textContent = animationSpeed + '%';
     });
     
     // Settings toggle
@@ -2085,6 +2061,13 @@ function animate() {
     
     // Update move trail
     updateMoveTrail();
+    
+    // Rotate cube overlays towards camera
+    cubeOverlays.forEach(overlay => {
+        if (overlay.parent) {
+            overlay.lookAt(camera.position);
+        }
+    });
     
     // Animate marks
     marks.forEach((mark, index) => {
