@@ -289,13 +289,18 @@ function initMinimap() {
         syncMinimapToMain();
     }, { passive: false });
 
-    // Lighting for minimap
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    // Brighter lighting for minimap
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); // Increased from 0.8
     minimapScene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Increased from 0.6
     directionalLight.position.set(10, 10, 5);
     minimapScene.add(directionalLight);
+    
+    // Add another light from the opposite side for better illumination
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight2.position.set(-10, -10, -5);
+    minimapScene.add(directionalLight2);
 
     // Create minimap cubes (much smaller and simpler)
     createMinimapCubes();
@@ -326,9 +331,11 @@ function createMinimapCubes() {
         // Create simple cube geometry
         const cubeGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
         const cubeMaterial = new THREE.MeshPhysicalMaterial({
-            color: CUBE_COLOR,
+            color: 0x666666, // Lighter gray for better visibility
+            emissive: 0x333333, // Add emissive for brightness
+            emissiveIntensity: 0.3,
             transparent: true,
-            opacity: 0.15,
+            opacity: 0.25, // Increased from 0.15
             metalness: 0.1,
             roughness: 0.4
         });
@@ -1698,13 +1705,15 @@ function updateMinimap() {
         // Show won cubes with their colors
         if (gameState.cubeWinners[cubeIndex]) {
             if (gameState.cubeWinners[cubeIndex] === 'X') {
-                cube.material.color.setHex(0x66aa66); // Softer green for X
+                cube.material.color.setHex(0x00ff00); // Bright green for X
                 cube.material.emissive.setHex(0x00ff00);
-                cube.material.emissiveIntensity = 0.1;
+                cube.material.emissiveIntensity = 0.5; // Stronger glow
+                cube.material.opacity = 0.6; // More visible
             } else {
-                cube.material.color.setHex(0xaa6666); // Softer red for O
+                cube.material.color.setHex(0xff0000); // Bright red for O
                 cube.material.emissive.setHex(0xff3333);
-                cube.material.emissiveIntensity = 0.1;
+                cube.material.emissiveIntensity = 0.5; // Stronger glow
+                cube.material.opacity = 0.6; // More visible
             }
         }
         
