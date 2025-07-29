@@ -41,7 +41,7 @@ const CELL_SIZE = 0.4 * sizeFactor; // Bigger cells on smaller screens
 const CELL_SPACING = 0.25;
 const CUBE_SPACING = 1.0 / sizeFactor; // Minimal spacing between cubes
 const TOTAL_CUBES = 27;
-const DEBUG_MODE = true; // Set to true to enable console logging
+const DEBUG_MODE = false; // Set to true to enable console logging
 
 // Convert speed (0-100) to delay multiplier
 // 0 = very slow (10x delay), 20 = normal slow (2x), 50 = normal (1x), 100 = very fast (0.2x delay)
@@ -710,8 +710,9 @@ function makeMove(cubeIndex, cellIndex) {
         showCubeWinner(cubeIndex);
         
         // Check if this wins the game
-        if (checkGameWinner()) {
-            handleGameWin();
+        const winningCombination = checkGameWinner();
+        if (winningCombination) {
+            handleGameWin(winningCombination);
             return;
         }
     }
@@ -824,11 +825,12 @@ function checkGameWinner() {
         if (winners[0] && winners[0] === winners[1] && winners[0] === winners[2]) {
             if (DEBUG_MODE) console.log(`Game won! Player ${winners[0]} won with cubes: ${combination.join(', ')}`);
             if (DEBUG_MODE) console.log(`Cube winners state:`, gameState.cubeWinners);
-            return true;
+            // Return the winning combination
+            return combination;
         }
     }
     
-    return false;
+    return null;
 }
 
 // Check for game draw
@@ -1091,7 +1093,7 @@ function findGameWinningMove(moves) {
             gameState.cubeWinners[move.cube] = oldPlayer;
             
             // Check if this wins the game
-            const gameWon = checkGameWinner();
+            const gameWon = checkGameWinner() !== null;
             
             // Undo the move
             gameState.cubeWinners[move.cube] = null;
@@ -1724,7 +1726,7 @@ function updateMinimap() {
 }
 
 // Game end handlers
-function handleGameWin() {
+function handleGameWin(winningCombination) {
     gameState.gameOver = true;
     gameState.gameWinner = gameState.currentPlayer;
     
@@ -1735,6 +1737,18 @@ function handleGameWin() {
     }
     
     updateUI();
+    
+    // Make all cubes more transparent
+    makeAllCubesTransparent();
+    
+    // Draw line through winning cubes
+    drawGameWinningLine(winningCombination);
+    
+    // Show big winner mark
+    showGameWinner();
+    
+    // Add confetti celebration
+    createConfetti();
     
     // Victory animation
     const duration = 3000;
@@ -1755,6 +1769,174 @@ function handleGameWin() {
     }
     
     animate();
+}
+
+function makeAllCubesTransparent() {
+    // Make all cube cells very transparent
+    cubes.forEach(cube => {
+        cube.cells.forEach(cell => {
+            cell.material.opacity = 0.15; // Very see-through
+            cell.material.transparent = true;
+        });
+    });
+    
+    // Also make the marks more transparent
+    marks.forEach(mark => {
+        if (mark.material) {
+            mark.material.opacity = 0.3;
+            mark.material.transparent = true;
+        } else if (mark.children) {
+            // For X marks which are groups
+            mark.children.forEach(child => {
+                if (child.material) {
+                    child.material.opacity = 0.3;
+                    child.material.transparent = true;
+                }
+            });
+        }
+    });
+}
+
+function drawGameWinningLine(combination) {
+    // Get positions of the three winning cubes
+    const positions = combination.map(idx => cubes[idx].group.position.clone());
+    
+    // Create a thick line through the winning cubes
+    const material = new THREE.LineBasicMaterial({
+        color: gameState.currentPlayer === 'X' ? 0x00ff00 : 0xff0000,
+        linewidth: 10, // Note: linewidth doesn't work in WebGL, using cylinder instead
+        transparent: true,
+        opacity: 0.8
+    });
+    
+    // Create cylinders to connect the cubes
+    for (let i = 0; i < positions.length - 1; i++) {
+        const start = positions[i];
+        const end = positions[i + 1];
+        const distance = start.distanceTo(end);
+        
+        const cylinderGeometry = new THREE.CylinderGeometry(0.3, 0.3, distance, 8);
+        const cylinderMaterial = new THREE.MeshPhysicalMaterial({
+            color: gameState.currentPlayer === 'X' ? 0x00ff00 : 0xff0000,
+            emissive: gameState.currentPlayer === 'X' ? 0x00ff00 : 0xff0000,
+            emissiveIntensity: 0.8,
+            metalness: 0.3,
+            roughness: 0.2,
+            transparent: true,
+            opacity: 0.9
+        });
+        
+        const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+        
+        // Position cylinder between cubes
+        cylinder.position.copy(start).add(end).multiplyScalar(0.5);
+        
+        // Orient cylinder to connect the cubes
+        const direction = new THREE.Vector3().subVectors(end, start).normalize();
+        const axis = new THREE.Vector3(0, 1, 0);
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction);
+        cylinder.setRotationFromQuaternion(quaternion);
+        
+        scene.add(cylinder);
+        winningLines.push(cylinder);
+    }
+}
+
+function showGameWinner() {
+    // Create massive winner mark in the center
+    const winnerMark = gameState.gameWinner === 'X' ? create3DX() : create3DO();
+    winnerMark.scale.set(20, 20, 20); // Huge scale
+    winnerMark.position.set(0, 5, 0); // Above the game
+    scene.add(winnerMark);
+    
+    // Animate the winner mark
+    const animateWinner = () => {
+        if (!gameState.gameOver) return;
+        winnerMark.rotation.y += 0.02;
+        winnerMark.position.y = 5 + Math.sin(Date.now() * 0.001) * 0.5;
+        requestAnimationFrame(animateWinner);
+    };
+    animateWinner();
+    
+    // Store reference to remove on reset
+    winningLines.push(winnerMark);
+}
+
+function createConfetti() {
+    const confettiGroup = new THREE.Group();
+    const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xffffff];
+    const confettiPieces = [];
+    
+    // Create confetti particles
+    for (let i = 0; i < 200; i++) {
+        const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.05);
+        const material = new THREE.MeshPhysicalMaterial({
+            color: colors[Math.floor(Math.random() * colors.length)],
+            metalness: 0.8,
+            roughness: 0.2
+        });
+        
+        const confetti = new THREE.Mesh(geometry, material);
+        confetti.position.set(
+            (Math.random() - 0.5) * 20,
+            10 + Math.random() * 5,
+            (Math.random() - 0.5) * 20
+        );
+        confetti.rotation.set(
+            Math.random() * Math.PI,
+            Math.random() * Math.PI,
+            Math.random() * Math.PI
+        );
+        
+        confetti.userData = {
+            velocity: new THREE.Vector3(
+                (Math.random() - 0.5) * 0.2,
+                -Math.random() * 0.1 - 0.05,
+                (Math.random() - 0.5) * 0.2
+            ),
+            rotationSpeed: new THREE.Vector3(
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.1
+            )
+        };
+        
+        confettiGroup.add(confetti);
+        confettiPieces.push(confetti);
+    }
+    
+    scene.add(confettiGroup);
+    
+    // Animate confetti falling
+    const animateConfetti = () => {
+        if (!gameState.gameOver) {
+            scene.remove(confettiGroup);
+            return;
+        }
+        
+        confettiPieces.forEach(piece => {
+            piece.position.add(piece.userData.velocity);
+            piece.rotation.x += piece.userData.rotationSpeed.x;
+            piece.rotation.y += piece.userData.rotationSpeed.y;
+            piece.rotation.z += piece.userData.rotationSpeed.z;
+            
+            // Add gravity
+            piece.userData.velocity.y -= 0.002;
+            
+            // Remove if too low
+            if (piece.position.y < -10) {
+                confettiGroup.remove(piece);
+            }
+        });
+        
+        if (confettiPieces.length > 0) {
+            requestAnimationFrame(animateConfetti);
+        }
+    };
+    animateConfetti();
+    
+    // Store reference to remove on reset
+    winningLines.push(confettiGroup);
 }
 
 function handleGameDraw() {
@@ -1782,6 +1964,14 @@ function resetGame() {
     
     // Clear cubes with win lines tracking  
     cubesWithWinLines.clear();
+    
+    // Restore cube opacity
+    cubes.forEach(cube => {
+        cube.cells.forEach(cell => {
+            cell.material.opacity = 0.4; // Restore original opacity
+            cell.material.transparent = true;
+        });
+    });
     
     // Reset game state
     initGameState();
