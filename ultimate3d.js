@@ -11,19 +11,45 @@ let activeHighlights = [];
 let cubeOverlays = [];
 let moveHistory = []; // Store recent moves for trail effect
 let cubesWithWinLines = new Set(); // Track which cubes already have winning lines
+let aiPaused = false; // Track if AI vs AI is paused
+let cameraAnimating = false; // Track if camera is animating
+let gameSpeed = 20; // Game speed (0-100 scale, where 20 is normal speed)
+let frameCount = 0;
+let lastFPSUpdate = Date.now();
+let currentFPS = 0;
 
 // Minimap 3D variables
 let minimapScene, minimapCamera, minimapRenderer;
 let minimapCubes = [];
+let minimapMarks = []; // Store minimap X and O marks
 let minimapRaycaster, minimapMouse;
 let minimapControls;
+let minimapZoom = 10; // Track minimap zoom level separately
 
 // Constants
+// Adjust sizes based on screen size
+const screenSize = Math.min(window.innerWidth, window.innerHeight);
+let sizeFactor = 1;
+if (screenSize < 600) { // Mobile
+    sizeFactor = 1.3;
+} else if (screenSize < 1000) { // Tablet
+    sizeFactor = 1.1;
+}
+
 const CUBE_SIZE = 3;
-const CELL_SIZE = 0.3;
+const CELL_SIZE = 0.4 * sizeFactor; // Bigger cells on smaller screens
 const CELL_SPACING = 0.25;
-const CUBE_SPACING = 1.5;
+const CUBE_SPACING = 1.0 / sizeFactor; // Minimal spacing between cubes
 const TOTAL_CUBES = 27;
+const DEBUG_MODE = true; // Set to true to enable console logging
+
+// Convert speed (0-100) to delay multiplier
+// 0 = very slow (10x delay), 20 = normal slow (2x), 50 = normal (1x), 100 = very fast (0.2x delay)
+function getSpeedMultiplier() {
+    if (gameSpeed === 0) return 10;
+    if (gameSpeed <= 50) return 2 - (gameSpeed / 50) * 1; // 2x to 1x
+    return 1 - ((gameSpeed - 50) / 50) * 0.8; // 1x to 0.2x
+}
 
 // Single color for all cubes
 const CUBE_COLOR = 0x444444; // Dark gray for all cubes
@@ -218,7 +244,7 @@ function initGameState() {
         player1Score: 0,
         player2Score: 0,
         gameMode: 'single',
-        disableAutoFocus: true
+        disableAutoFocus: false // Auto-focus is ON by default
     };
 }
 
@@ -226,20 +252,43 @@ function initGameState() {
 function initMinimap() {
     // Minimap scene setup
     minimapScene = new THREE.Scene();
-    minimapScene.background = new THREE.Color(0x0a0a0a);
+    minimapScene.background = null; // Transparent background
 
-    // Minimap camera setup - positioned with less zoom for better overview
+    // Minimap camera setup
     minimapCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-    minimapCamera.position.set(4.5, 3.5, 4.5);
+    minimapCamera.position.set(7, 6, 7);
     minimapCamera.lookAt(0, 0, 0);
 
     // Minimap renderer setup
     minimapRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    minimapRenderer.setSize(380, 380);
+    const minimapContainer = document.getElementById('cube-minimap');
+    
+    // Ensure container has valid dimensions before setting size
+    let minimapSize = Math.min(minimapContainer.offsetWidth, minimapContainer.offsetHeight) - 20;
+    if (minimapSize <= 0) {
+        minimapSize = 180; // Default size if container not ready
+    }
+    
+    minimapRenderer.setSize(minimapSize, minimapSize);
     minimapRenderer.setClearColor(0x000000, 0);
     const minimapCanvas = minimapRenderer.domElement;
     minimapCanvas.style.cursor = 'pointer';
+    minimapCanvas.style.width = '100%';
+    minimapCanvas.style.height = '100%';
     document.getElementById('minimap-canvas-container').appendChild(minimapCanvas);
+    
+    // Add scroll event for minimap zoom
+    minimapContainer.addEventListener('wheel', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // Adjust minimap zoom
+        const delta = event.deltaY > 0 ? 1.1 : 0.9;
+        minimapZoom = Math.max(5, Math.min(20, minimapZoom * delta));
+        
+        // Update minimap camera position
+        syncMinimapToMain();
+    }, { passive: false });
 
     // Lighting for minimap
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
@@ -262,8 +311,8 @@ function initMinimap() {
 
 // Create simplified cubes for minimap
 function createMinimapCubes() {
-    const cubeSize = 0.8;
-    const spacing = 1.2;
+    const cubeSize = 1.0;
+    const spacing = 1.4;
     
     for (let i = 0; i < TOTAL_CUBES; i++) {
         // Calculate 3D position: layer, row, column (same logic as main game)
@@ -280,8 +329,8 @@ function createMinimapCubes() {
         const cubeMaterial = new THREE.MeshPhysicalMaterial({
             color: CUBE_COLOR,
             transparent: true,
-            opacity: 0.7,
-            metalness: 0.3,
+            opacity: 0.15,
+            metalness: 0.1,
             roughness: 0.4
         });
 
@@ -312,11 +361,45 @@ function init() {
     // Scene setup
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a0a);
-    scene.fog = new THREE.Fog(0x0a0a0a, 10, 50);
+    scene.fog = new THREE.Fog(0x0a0a0a, 50, 200); // Pushed fog much farther out
 
     // Camera setup - much closer default zoom
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(10, 6, 10);
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000); // Increased far plane
+    // Calculate the bounding box of all cubes
+    // Each cube has size CUBE_SIZE * CELL_SIZE * 3 (3x3x3 cells)
+    const cubeActualSize = CUBE_SIZE * CELL_SIZE * 3;
+    // Total structure size: 3 cubes + 2 gaps between them
+    const structureSize = cubeActualSize * 3 + CUBE_SPACING * CELL_SIZE * 3 * 2;
+    
+    // Since camera is positioned diagonally, we need to account for the diagonal view
+    // The diagonal distance is sqrt(3) times larger
+    const diagonalFactor = Math.sqrt(3);
+    const effectiveSize = structureSize * diagonalFactor;
+    
+    // Calculate distance based on FOV
+    const fov = camera.fov * Math.PI / 180;
+    const aspect = window.innerWidth / window.innerHeight;
+    
+    // Use the smaller dimension to ensure it fits in both width and height
+    const vFov = 2 * Math.atan(Math.tan(fov / 2) / aspect);
+    const minFov = Math.min(fov, vFov);
+    
+    // Distance to fit the structure with safe padding
+    const screenSize = Math.min(window.innerWidth, window.innerHeight);
+    let paddingFactor = 1.4; // Safe default padding to ensure all cubes visible
+    
+    if (screenSize > 1400) { // Large monitors
+        paddingFactor = 1.0; // Closer view for large screens
+    } else if (screenSize > 800) { // Medium screens
+        paddingFactor = 1.1; // Closer view for medium screens
+    } else if (screenSize < 600) { // Mobile
+        paddingFactor = 1.5; // Extra padding for mobile
+    }
+    
+    const distance = (effectiveSize * paddingFactor) / (2 * Math.tan(minFov / 2));
+    
+    // Position camera diagonally
+    camera.position.set(distance * 0.7, distance * 0.5, distance * 0.7);
     camera.lookAt(0, 1, 0);
 
     // Renderer setup
@@ -332,6 +415,10 @@ function init() {
     controls.minDistance = 3;
     controls.maxDistance = 60;
     controls.zoomSpeed = 0.3;
+    
+    // Remove rotation limits - allow full rotation
+    controls.minPolarAngle = 0; // Allow rotation to top
+    controls.maxPolarAngle = Math.PI; // Allow rotation to bottom
 
     // Much brighter and more even lighting - no reflections
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
@@ -355,6 +442,14 @@ function init() {
 
     // Create the 9 cubes
     createCubes();
+    
+    // Set controls target to the middle cube position for proper rotation center
+    if (cubes[13]) {
+        const middleCubePos = cubes[13].group.position.clone();
+        controls.target.copy(middleCubePos);
+        camera.lookAt(middleCubePos);
+        controls.update();
+    }
 
     // Platform removed to avoid hiding bottom cubes
 
@@ -362,10 +457,19 @@ function init() {
     window.addEventListener('resize', onWindowResize);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('click', onMouseClick);
+    
+    // Add touch support for mobile
+    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+    renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
+    
     setupUIListeners();
 
     // Initialize minimap
     initMinimap();
+    
+    // Add drag functionality to minimap
+    addMinimapDragFunctionality();
     
     // Start animation
     animate();
@@ -387,7 +491,7 @@ function createCubes() {
         const cubeZ = (row - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
         
         // Debug cube positioning
-        console.log(`Cube ${i}: layer=${layer}, row=${row}, col=${col} -> position=(${cubeX.toFixed(2)}, ${cubeY.toFixed(2)}, ${cubeZ.toFixed(2)})`);
+        if (DEBUG_MODE) console.log(`Cube ${i}: layer=${layer}, row=${row}, col=${col} -> position=(${cubeX.toFixed(2)}, ${cubeY.toFixed(2)}, ${cubeZ.toFixed(2)})`);
         
         cubeGroup.position.set(cubeX, cubeY, cubeZ);
         cubeGroup.userData = { cubeIndex: i };
@@ -405,7 +509,7 @@ function createCubes() {
                         metalness: 0.3,
                         roughness: 0.2,
                         transparent: true,
-                        opacity: 0.6,
+                        opacity: 0.4,
                         clearcoat: 1,
                         clearcoatRoughness: 0
                     });
@@ -432,20 +536,7 @@ function createCubes() {
             }
         }
         
-        // Add cube boundary
-        const boundaryGeometry = new THREE.BoxGeometry(
-            3 * CELL_SIZE + 2.5 * CELL_SPACING,
-            3 * CELL_SIZE + 2.5 * CELL_SPACING,
-            3 * CELL_SIZE + 2.5 * CELL_SPACING
-        );
-        const boundaryMaterial = new THREE.MeshBasicMaterial({
-            color: CUBE_COLOR,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.0
-        });
-        const boundary = new THREE.Mesh(boundaryGeometry, boundaryMaterial);
-        cubeGroup.add(boundary);
+        // Removed invisible boundary mesh that was showing wireframe triangles
         
         cubes.push({ group: cubeGroup, cells: cubeCells });
         cells.push(...cubeCells);
@@ -462,11 +553,12 @@ function create3DX() {
     const group = new THREE.Group();
     const barGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.9, CELL_SIZE * 0.15, CELL_SIZE * 0.15);
     const xMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0x00ff00, // Bright green for X
-        emissive: 0x00ff00,
-        emissiveIntensity: 0.8, // Much brighter
+        color: 0x008800, // Darker green for X
+        emissive: 0x00aa00,
+        emissiveIntensity: 0.4, // Less bright
         metalness: 0.1,
-        roughness: 0.1
+        roughness: 0.1,
+        transparent: false // Fully opaque
     });
 
     const bar1 = new THREE.Mesh(barGeometry, xMaterial);
@@ -481,9 +573,9 @@ function create3DX() {
     // Add glow effect
     const glowGeometry = new THREE.BoxGeometry(CELL_SIZE * 1.1, CELL_SIZE * 0.2, CELL_SIZE * 0.2);
     const glowMaterial = new THREE.MeshBasicMaterial({
-        color: 0x00ff00,
+        color: 0x008800,
         transparent: true,
-        opacity: 0.3
+        opacity: 0.5
     });
     
     const glow1 = new THREE.Mesh(glowGeometry, glowMaterial);
@@ -501,11 +593,12 @@ function create3DX() {
 function create3DO() {
     const torusGeometry = new THREE.TorusGeometry(CELL_SIZE * 0.35, CELL_SIZE * 0.12, 12, 20);
     const oMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0xff3333, // Bright red for O
-        emissive: 0xff3333,
-        emissiveIntensity: 0.8, // Much brighter
+        color: 0xcc0000, // Darker red for O
+        emissive: 0xaa0000,
+        emissiveIntensity: 0.4, // Less bright
         metalness: 0.1,
-        roughness: 0.1
+        roughness: 0.1,
+        transparent: false // Fully opaque
     });
 
     const torus = new THREE.Mesh(torusGeometry, oMaterial);
@@ -543,7 +636,7 @@ function determineNextCube(cellIndex) {
     
     const targetCube = targetLayer * 9 + targetRow * 3 + targetCol;
     
-    console.log(`Cell ${cellIndex} at (x=${cellX}, y=${cellY}, z=${cellZ}) -> Cube ${targetCube} at (layer=${targetLayer}, row=${targetRow}, col=${targetCol})`);
+    if (DEBUG_MODE) console.log(`Cell ${cellIndex} at (x=${cellX}, y=${cellY}, z=${cellZ}) -> Cube ${targetCube} at (layer=${targetLayer}, row=${targetRow}, col=${targetCol})`);
     
     return targetCube;
 }
@@ -571,6 +664,12 @@ function isValidMove(cubeIndex, cellIndex) {
 // Make a move
 function makeMove(cubeIndex, cellIndex) {
     if (!isValidMove(cubeIndex, cellIndex)) return;
+    
+    // Don't allow moves during camera animation
+    if (cameraAnimating) {
+        if (DEBUG_MODE) console.log('Move blocked - camera is animating');
+        return;
+    }
     
     // Update game state
     const z = Math.floor(cellIndex / 9);
@@ -641,17 +740,20 @@ function makeMove(cubeIndex, cellIndex) {
     updateActiveHighlights();
     updateMinimap();
     
-    // Auto-focus on next active cube if there's only one (slower)
+    // Auto-focus on active cube
     if (gameState.activeCubes !== null && !gameState.disableAutoFocus) {
-        setTimeout(() => focusOnCube(gameState.activeCubes), 1200);
+        focusOnCube(gameState.activeCubes); // Focus on the active cube
     }
     
     // Computer move
     if (!gameState.gameOver) {
+        if (DEBUG_MODE) console.log('Checking for computer move. Mode:', gameState.gameMode, 'Player:', gameState.currentPlayer, 'AI Paused:', aiPaused);
         if (gameState.gameMode === 'single' && gameState.currentPlayer === 'O') {
-            setTimeout(computerMove, 1200);
-        } else if (gameState.gameMode === 'ai-vs-ai') {
-            setTimeout(computerMove, 1500); // 1.5 second delay for AI vs AI
+            setTimeout(computerMove, 1200 * getSpeedMultiplier());
+        } else if (gameState.gameMode === 'ai-vs-ai' && !aiPaused) {
+            // Continue AI vs AI game
+            if (DEBUG_MODE) console.log('Scheduling AI vs AI move');
+            setTimeout(computerMove, 1500 * getSpeedMultiplier()); // 1.5 second delay for AI vs AI
         }
     }
 }
@@ -679,7 +781,7 @@ function checkCubeWinner(cubeIndex) {
             positions[1] === player && positions[2] === player) {
             
             // Debug log to check if this is a valid win
-            console.log(`Valid win detected in cube ${cubeIndex} for player ${player}:`, positions, 'combination:', combination);
+            if (DEBUG_MODE) console.log(`Valid win detected in cube ${cubeIndex} for player ${player}:`, positions, 'combination:', combination);
             
             // Yellow winning lines removed per user request
             return true;
@@ -718,8 +820,8 @@ function checkGameWinner() {
         const winners = combination.map(idx => gameState.cubeWinners[idx]);
         
         if (winners[0] && winners[0] === winners[1] && winners[0] === winners[2]) {
-            console.log(`Game won! Player ${winners[0]} won with cubes: ${combination.join(', ')}`);
-            console.log(`Cube winners state:`, gameState.cubeWinners);
+            if (DEBUG_MODE) console.log(`Game won! Player ${winners[0]} won with cubes: ${combination.join(', ')}`);
+            if (DEBUG_MODE) console.log(`Cube winners state:`, gameState.cubeWinners);
             return true;
         }
     }
@@ -804,15 +906,15 @@ function updateActiveHighlights() {
     });
     activeHighlights = [];
     
-    console.log('Active cubes:', gameState.activeCubes);
+    if (DEBUG_MODE) console.log('Active cubes:', gameState.activeCubes);
     
     // Highlight active cubes - only show outline on the specific active cube
     if (gameState.activeCubes !== null) {
         // Only one cube is active - highlight it
-        console.log('Highlighting cube:', gameState.activeCubes);
+        if (DEBUG_MODE) console.log('Highlighting cube:', gameState.activeCubes);
         highlightCube(gameState.activeCubes);
     } else {
-        console.log('No cube highlighted - can play anywhere');
+        if (DEBUG_MODE) console.log('No cube highlighted - can play anywhere');
     }
 }
 
@@ -820,7 +922,7 @@ function updateActiveHighlights() {
 function highlightCube(cubeIndex) {
     const cube = cubes[cubeIndex];
     
-    console.log('Adding highlight to cube:', cubeIndex);
+    if (DEBUG_MODE) console.log('Adding highlight to cube:', cubeIndex);
     
     // Only add wireframe border (no cell brightening)
     const frameGeometry = new THREE.BoxGeometry(
@@ -830,7 +932,7 @@ function highlightCube(cubeIndex) {
     );
     const frameEdges = new THREE.EdgesGeometry(frameGeometry);
     const frameMaterial = new THREE.LineBasicMaterial({
-        color: 0x00ffff, // Bright cyan for better visibility
+        color: gameState.currentPlayer === 'X' ? 0x00ff00 : 0xff3333, // Green for X, Red for O
         linewidth: 4, // Thicker lines
         transparent: true,
         opacity: 0.9
@@ -839,7 +941,7 @@ function highlightCube(cubeIndex) {
     cube.group.add(frame);
     activeHighlights.push(frame);
     
-    console.log('Total active highlights now:', activeHighlights.length);
+    if (DEBUG_MODE) console.log('Total active highlights now:', activeHighlights.length);
 }
 
 // Mouse handlers
@@ -887,6 +989,22 @@ function onMouseClick() {
 
 // Computer AI with improved strategy
 function computerMove() {
+    if (DEBUG_MODE) console.log('computerMove() called. Mode:', gameState.gameMode, 'Player:', gameState.currentPlayer, 'Paused:', aiPaused);
+    
+    // Check if camera is animating
+    if (cameraAnimating) {
+        // Check again in a bit
+        if (!gameState.gameOver) {
+            setTimeout(computerMove, 200 * getSpeedMultiplier());
+        }
+        return;
+    }
+    
+    // Only check aiPaused for AI vs AI mode
+    if (gameState.gameMode === 'ai-vs-ai' && aiPaused) {
+        return;
+    }
+    
     const validMoves = [];
     
     // Find all valid moves
@@ -900,6 +1018,8 @@ function computerMove() {
             }
         }
     }
+    
+    if (DEBUG_MODE) console.log('Valid moves found:', validMoves.length, 'Active cube:', gameState.activeCubes);
     
     if (validMoves.length === 0) return;
     
@@ -943,6 +1063,7 @@ function computerMove() {
     
     // 6. Random move as fallback
     const move = validMoves[Math.floor(Math.random() * validMoves.length)];
+    if (DEBUG_MODE) console.log('Making move:', move);
     makeMove(move.cube, move.cell);
 }
 
@@ -1151,26 +1272,218 @@ function animateCubeOverlay(overlay) {
 
 
 // Camera controls
+// Focus on center while rotating to face the active cube
+function focusOnCenter() {
+    if (gameState.activeCubes === null) return;
+    
+    // Set camera animating flag
+    cameraAnimating = true;
+    
+    // Always focus on the middle cube (cube 13)
+    const middleCubePosition = cubes[13].group.position.clone();
+    const activeCube = cubes[gameState.activeCubes];
+    const activeCubePosition = activeCube.group.position.clone();
+    
+    // Calculate CURRENT camera spherical coordinates relative to middle cube
+    const currentOffset = camera.position.clone().sub(middleCubePosition);
+    const currentRadius = currentOffset.length();
+    const currentAzimuth = Math.atan2(currentOffset.x, currentOffset.z);
+    const currentElevation = Math.asin(currentOffset.y / currentRadius);
+    
+    // Calculate TARGET spherical coordinates based on active cube position
+    const cubeOffset = activeCubePosition.clone().sub(middleCubePosition);
+    
+    // Get cube position in grid
+    const layer = Math.floor(gameState.activeCubes / 9);
+    const row = Math.floor((gameState.activeCubes % 9) / 3);
+    const col = gameState.activeCubes % 3;
+    
+    // Target azimuth - position camera on same side as active cube
+    let targetAzimuth = Math.atan2(cubeOffset.x, cubeOffset.z);
+    
+    // For middle column cubes (col=1), add extra rotation to see them better
+    if (col === 1) {
+        // Middle column - rotate more to the side
+        if (row === 0) { // Back row
+            targetAzimuth += 0.5; // Rotate more to side
+        } else if (row === 2) { // Front row
+            targetAzimuth -= 0.5; // Rotate more to other side
+        }
+        // Middle row, middle col stays as is
+    }
+    
+    // Target elevation - more extreme for bottom/top layer cubes
+    let targetElevation;
+    
+    if (layer === 0) { // Bottom layer - need camera much lower
+        targetElevation = -1.0; // Even lower for better view
+        // For middle row of bottom layer, go even lower
+        if (row === 1) targetElevation = -1.2;
+    } else if (layer === 1) { // Middle layer
+        targetElevation = 0.1;
+    } else { // Top layer
+        targetElevation = 0.8; // Higher for top layer
+        // For middle row of top layer, go even higher
+        if (row === 1) targetElevation = 1.0;
+    }
+    
+    // Ensure we take the shortest path around the sphere
+    const azimuthDiff = targetAzimuth - currentAzimuth;
+    if (azimuthDiff > Math.PI) targetAzimuth -= 2 * Math.PI;
+    else if (azimuthDiff < -Math.PI) targetAzimuth += 2 * Math.PI;
+    
+    // Smooth animation with spherical interpolation
+    const duration = 600; // Smoother animation
+    const startTime = Date.now();
+    const startAzimuth = currentAzimuth;
+    const startElevation = currentElevation;
+    
+    function animate() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing
+        const easeInOut = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        const p = easeInOut(progress);
+        
+        // Interpolate spherical coordinates
+        const azimuth = startAzimuth + (targetAzimuth - startAzimuth) * p;
+        const elevation = startElevation + (targetElevation - startElevation) * p;
+        
+        // Convert to cartesian coordinates (maintaining constant radius)
+        const newPosition = new THREE.Vector3(
+            currentRadius * Math.cos(elevation) * Math.sin(azimuth),
+            currentRadius * Math.sin(elevation),
+            currentRadius * Math.cos(elevation) * Math.cos(azimuth)
+        ).add(middleCubePosition);
+        
+        camera.position.copy(newPosition);
+        controls.target.copy(middleCubePosition);
+        controls.update();
+        
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            // Animation complete - add 300ms delay before allowing moves
+            setTimeout(() => {
+                cameraAnimating = false;
+            }, 300);
+        }
+    }
+    
+    animate();
+}
+
 function focusOnCube(cubeIndex) {
+    if (DEBUG_MODE) console.log('focusOnCube called for cube:', cubeIndex, 'Auto-focus disabled?', gameState.disableAutoFocus);
+    if (gameState.disableAutoFocus) return;
+    
+    // Don't start a new animation if one is already in progress
+    if (cameraAnimating) {
+        if (DEBUG_MODE) console.log('Camera animation already in progress, skipping');
+        return;
+    }
+    
+    // Safety check for cubes
+    if (!cubes[cubeIndex] || !cubes[13]) {
+        console.error('Cubes not properly initialized');
+        return;
+    }
+    
     const cube = cubes[cubeIndex];
     const cubePosition = cube.group.position.clone();
     
-    // Calculate cube's position in the 3x3x3 structure
+    // Set camera animating flag
+    cameraAnimating = true;
+    
+    // Get middle cube position
+    const middleCubePos = cubes[13].group.position.clone(); // Center cube
+    
+    // Get current camera distance from middle cube to maintain zoom
+    const currentDistance = camera.position.distanceTo(middleCubePos);
+    const deltaX = cubePosition.x - middleCubePos.x;
+    const deltaZ = cubePosition.z - middleCubePos.z;
+    const deltaY = cubePosition.y - middleCubePos.y;
+    
+    // Calculate spherical coordinates to position camera very close to the active cube
+    // The camera moves on the sphere towards the active cube position
+    const direction = new THREE.Vector3(deltaX, deltaY, deltaZ).normalize();
+    
+    // Use the direction to calculate spherical angles
+    let theta = Math.atan2(direction.x, direction.z);
+    
+    // Calculate phi based on the layer to get really close
     const layer = Math.floor(cubeIndex / 9);
-    const row = Math.floor((cubeIndex % 9) / 3);
-    const col = cubeIndex % 3;
+    let phi;
     
-    // Use a fixed distance and angle for better viewing
-    const distance = 10; // Increased distance for better view
+    // Calculate the angle to position camera
+    const dirLength = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
     
-    // Simple diagonal view that works well for all cubes
-    const targetPosition = cubePosition.clone();
-    targetPosition.add(new THREE.Vector3(distance * 0.7, distance * 0.5, distance * 0.7));
+    // Calculate optimal camera position in 3D space
+    // We want to position camera so active cube is closest with middle cube visible behind
     
-    // Faster animation
-    const duration = 400;
+    // Check if it's the middle cube of middle layer (cube 13)
+    if (cubeIndex === 13) {
+        // Center cube - maintain current camera angle
+        theta = Math.atan2(camera.position.x - middleCubePos.x, camera.position.z - middleCubePos.z);
+        phi = Math.PI / 3;
+    } else {
+        // Calculate direction vector from middle to active cube
+        const dir = new THREE.Vector3(deltaX, deltaY, deltaZ).normalize();
+        
+        // Convert to spherical coordinates
+        // Position camera on the same side as the cube for closest view
+        theta = Math.atan2(dir.x, dir.z);
+        
+        // Calculate phi based on the full 3D direction
+        // This accounts for the Y component properly
+        const horizontalDist = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
+        phi = Math.atan2(horizontalDist, dir.y);
+        
+        // No limits on phi - allow full rotation
+        // phi can now be any value from 0 to PI
+        
+        // Add offset to position camera more to the right and above
+        theta += Math.PI / 6; // 30 degree horizontal offset to the right
+        
+        // Adjust phi to position camera higher (more top-down view)
+        phi -= 0.15; // Move camera up by reducing phi
+        
+        // For cubes far from center, add layer-specific adjustments
+        if (layer === 0) {
+            phi -= 0.1; // Even higher for bottom layer
+        } else if (layer === 2) {
+            phi += 0.1; // Slightly lower for top layer
+        }
+    }
+    
+    // Calculate new camera position on sphere at current distance
+    const targetCameraPos = new THREE.Vector3(
+        middleCubePos.x + currentDistance * Math.sin(phi) * Math.sin(theta),
+        middleCubePos.y + currentDistance * Math.cos(phi),
+        middleCubePos.z + currentDistance * Math.sin(phi) * Math.cos(theta)
+    );
+    
+    // Animate camera rotation with speed-based duration
     const startPos = camera.position.clone();
     const startTarget = controls.target.clone();
+    
+    // Calculate angular distance for speed-based animation
+    const startDir = new THREE.Vector3().subVectors(startPos, middleCubePos).normalize();
+    const targetDir = new THREE.Vector3().subVectors(targetCameraPos, middleCubePos).normalize();
+    const angle = Math.acos(Math.max(-1, Math.min(1, startDir.dot(targetDir))));
+    
+    // If we're already at the target, don't animate
+    if (angle < 0.01 || startPos.distanceTo(targetCameraPos) < 0.1) {
+        if (DEBUG_MODE) console.log('Camera already at target position, skipping animation');
+        cameraAnimating = false;
+        return;
+    }
+    
+    // Speed in radians per second (45 degrees per second)
+    const rotationSpeed = Math.PI / 4;
+    const duration = (angle / rotationSpeed) * 1000; // Convert to milliseconds
+    
     const startTime = Date.now();
     
     function animate() {
@@ -1181,15 +1494,107 @@ function focusOnCube(cubeIndex) {
         const easeOut = t => 1 - Math.pow(1 - t, 3);
         const p = easeOut(progress);
         
-        // Animate camera position
-        camera.position.lerpVectors(startPos, targetPosition, p);
+        // Animate camera position along the sphere surface
+        // Use spherical interpolation to maintain constant radius
+        const startRadius = startPos.distanceTo(middleCubePos);
+        const targetRadius = targetCameraPos.distanceTo(middleCubePos);
+        const currentRadius = startRadius + (targetRadius - startRadius) * p;
         
-        // Animate camera target (what it's looking at)
-        controls.target.lerpVectors(startTarget, cubePosition, p);
+        // Normalize positions relative to center and interpolate
+        const startDir = new THREE.Vector3().subVectors(startPos, middleCubePos);
+        const targetDir = new THREE.Vector3().subVectors(targetCameraPos, middleCubePos);
+        
+        // Safety check for zero vectors
+        if (startDir.lengthSq() < 0.001 || targetDir.lengthSq() < 0.001) {
+            console.error('Invalid camera direction vectors');
+            cameraAnimating = false;
+            return;
+        }
+        
+        startDir.normalize();
+        targetDir.normalize();
+        
+        // Proper spherical interpolation to avoid jumping
+        const currentDir = new THREE.Vector3();
+        
+        // Use spherical linear interpolation (slerp) for smooth rotation
+        const dot = startDir.dot(targetDir);
+        
+        // Clamp dot product to valid range
+        const clampedDot = Math.max(-1, Math.min(1, dot));
+        const theta = Math.acos(clampedDot);
+        
+        // If angle is very small, use simple lerp
+        if (theta < 0.001) {
+            currentDir.copy(startDir);
+        } else if (Math.abs(theta - Math.PI) < 0.001) {
+            // Vectors are opposite (180 degrees)
+            // Find a perpendicular vector to interpolate through
+            const perpendicular = new THREE.Vector3();
+            if (Math.abs(startDir.x) < 0.9) {
+                perpendicular.crossVectors(startDir, new THREE.Vector3(1, 0, 0));
+            } else {
+                perpendicular.crossVectors(startDir, new THREE.Vector3(0, 1, 0));
+            }
+            perpendicular.normalize();
+            
+            // Use two-step interpolation through perpendicular
+            const halfwayAngle = Math.PI / 2;
+            if (p < 0.5) {
+                // First half: from start to perpendicular
+                const localP = p * 2;
+                const sinTheta = Math.sin(halfwayAngle);
+                currentDir.copy(startDir).multiplyScalar(Math.sin(halfwayAngle * (1 - localP)) / sinTheta);
+                currentDir.add(perpendicular.clone().multiplyScalar(Math.sin(halfwayAngle * localP) / sinTheta));
+            } else {
+                // Second half: from perpendicular to target
+                const localP = (p - 0.5) * 2;
+                const sinTheta = Math.sin(halfwayAngle);
+                currentDir.copy(perpendicular).multiplyScalar(Math.sin(halfwayAngle * (1 - localP)) / sinTheta);
+                currentDir.add(targetDir.clone().multiplyScalar(Math.sin(halfwayAngle * localP) / sinTheta));
+            }
+        } else {
+            // Normal slerp
+            const sinTheta = Math.sin(theta);
+            const a = Math.sin((1 - p) * theta) / sinTheta;
+            const b = Math.sin(p * theta) / sinTheta;
+            currentDir.copy(startDir).multiplyScalar(a);
+            currentDir.add(targetDir.clone().multiplyScalar(b));
+        }
+        
+        currentDir.normalize();
+        
+        // Set camera position at constant radius
+        if (DEBUG_MODE && progress > 0.95) {
+            console.log('Camera animation near complete:', {
+                currentRadius,
+                currentDir: currentDir.toArray(),
+                middleCubePos: middleCubePos.toArray(),
+                cameraPosBefore: camera.position.toArray()
+            });
+        }
+        
+        camera.position.copy(middleCubePos).addScaledVector(currentDir, currentRadius);
+        
+        // Safety check for camera position
+        if (!isFinite(camera.position.x) || !isFinite(camera.position.y) || !isFinite(camera.position.z)) {
+            console.error('Invalid camera position calculated:', camera.position);
+            camera.position.set(10, 10, 10);
+        }
+        
+        // Keep camera always looking at middle cube
+        controls.target.copy(middleCubePos);
         controls.update();
         
         if (progress < 1) {
             requestAnimationFrame(animate);
+        } else {
+            // Animation complete - add 300ms delay before allowing moves
+            if (DEBUG_MODE) console.log('Camera animation complete, waiting 300ms before allowing moves');
+            setTimeout(() => {
+                cameraAnimating = false;
+                if (DEBUG_MODE) console.log('Camera cooldown complete, moves allowed');
+            }, 300);
         }
     }
     
@@ -1280,7 +1685,7 @@ function updateUI() {
     
     // Update current player indicator
     if (playerIndicator && playerSymbol) {
-        console.log('Updating player indicator to:', gameState.currentPlayer);
+        if (DEBUG_MODE) console.log('Updating player indicator to:', gameState.currentPlayer);
         playerSymbol.textContent = gameState.currentPlayer;
         
         // Remove previous classes
@@ -1293,15 +1698,15 @@ function updateUI() {
             playerIndicator.classList.add(gameState.currentPlayer === 'X' ? 'player-x' : 'player-o');
         }
     } else {
-        console.log('Player indicator elements not found:', {playerIndicator, playerSymbol});
+        if (DEBUG_MODE) console.log('Player indicator elements not found:', {playerIndicator, playerSymbol});
     }
 }
 
 function updateMinimap() {
-    console.log(`Updating 3D minimap. Active cubes: ${gameState.activeCubes}`);
+    if (DEBUG_MODE) console.log(`Updating 3D minimap. Active cubes: ${gameState.activeCubes}`);
     
     if (minimapCubes.length === 0) {
-        console.log('No minimap cubes found - minimap may not be initialized yet');
+        if (DEBUG_MODE) console.log('No minimap cubes found - minimap may not be initialized yet');
         return;
     }
     
@@ -1315,23 +1720,24 @@ function updateMinimap() {
         // Show won cubes with their colors
         if (gameState.cubeWinners[cubeIndex]) {
             if (gameState.cubeWinners[cubeIndex] === 'X') {
-                cube.material.color.setHex(0x00ff00); // Green for X
+                cube.material.color.setHex(0x66aa66); // Softer green for X
                 cube.material.emissive.setHex(0x00ff00);
-                cube.material.emissiveIntensity = 0.3;
+                cube.material.emissiveIntensity = 0.1;
             } else {
-                cube.material.color.setHex(0xff3333); // Red for O
+                cube.material.color.setHex(0xaa6666); // Softer red for O
                 cube.material.emissive.setHex(0xff3333);
-                cube.material.emissiveIntensity = 0.3;
+                cube.material.emissiveIntensity = 0.1;
             }
         }
         
-        // Highlight active cube with cyan if it's not won
+        // Highlight active cube with player color if it's not won
         if (gameState.activeCubes === cubeIndex && !gameState.cubeWinners[cubeIndex]) {
-            cube.material.color.setHex(0x00ffff); // Cyan for active
-            cube.material.emissive.setHex(0x00ffff);
-            cube.material.emissiveIntensity = 0.4;
+            const highlightColor = gameState.currentPlayer === 'X' ? 0x66aa66 : 0xaa6666; // Softer colors
+            cube.material.color.setHex(highlightColor);
+            cube.material.emissive.setHex(gameState.currentPlayer === 'X' ? 0x00ff00 : 0xff3333);
+            cube.material.emissiveIntensity = 0.15;
             cube.scale.set(1.1, 1.1, 1.1); // Slightly larger
-            console.log(`3D Minimap highlighting next legal move cube ${cubeIndex}`);
+            if (DEBUG_MODE) console.log(`3D Minimap highlighting next legal move cube ${cubeIndex}`);
         }
     });
     
@@ -1427,15 +1833,24 @@ function setupUIListeners() {
             gameState.gameMode = e.target.dataset.mode;
             document.getElementById('mode-selection').style.display = 'none';
             document.getElementById('controls').style.display = 'flex';
-            document.getElementById('instructions').style.display = 'block';
             document.getElementById('cube-minimap').style.display = 'grid';
             document.getElementById('left-panel').style.display = 'flex';
+            
+            // Show/hide pause button based on mode
+            const pauseBtn = document.getElementById('pause-ai-btn');
+            if (gameState.gameMode === 'ai-vs-ai') {
+                pauseBtn.style.display = 'flex';
+                aiPaused = false; // Start playing by default
+                document.getElementById('pause-icon').textContent = '⏸'; // Show pause symbol when playing
+            } else {
+                pauseBtn.style.display = 'none';
+            }
             
             updateUI();
             updateMinimap();
             updateActiveHighlights();
             
-            // Start AI vs AI game automatically
+            // Start AI vs AI game automatically after 1 second
             if (gameState.gameMode === 'ai-vs-ai') {
                 setTimeout(computerMove, 1000);
             }
@@ -1472,13 +1887,78 @@ function setupUIListeners() {
         document.getElementById('auto-rotate-btn').textContent = autoRotate ? 'Stop Rotation' : 'Auto Rotate';
     });
 
-    // Auto focus button - initialize with correct text
+    // Auto focus button - initialize with correct text and color
     const autoFocusBtn = document.getElementById('disable-auto-focus-btn');
-    autoFocusBtn.textContent = gameState.disableAutoFocus ? 'Auto Focus: OFF' : 'Auto Focus: ON';
+    autoFocusBtn.textContent = 'Auto Focus';
+    // Set initial color based on state (auto-focus is ON by default)
+    autoFocusBtn.style.background = gameState.disableAutoFocus ? 'rgba(255, 255, 255, 0.1)' : 'rgba(102, 126, 234, 0.3)';
+    autoFocusBtn.style.color = gameState.disableAutoFocus ? 'rgba(255, 255, 255, 0.5)' : '#667eea';
+    autoFocusBtn.style.borderColor = gameState.disableAutoFocus ? 'rgba(255, 255, 255, 0.3)' : '#667eea';
     
     autoFocusBtn.addEventListener('click', () => {
         gameState.disableAutoFocus = !gameState.disableAutoFocus;
-        autoFocusBtn.textContent = gameState.disableAutoFocus ? 'Auto Focus: OFF' : 'Auto Focus: ON';
+        if (gameState.disableAutoFocus) {
+            autoFocusBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+            autoFocusBtn.style.color = 'rgba(255, 255, 255, 0.5)';
+            autoFocusBtn.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+        } else {
+            autoFocusBtn.style.background = 'rgba(102, 126, 234, 0.3)';
+            autoFocusBtn.style.color = '#667eea';
+            autoFocusBtn.style.borderColor = '#667eea';
+        }
+    });
+    
+    // Pause AI button
+    const pauseAIBtn = document.getElementById('pause-ai-btn');
+    const pauseIcon = document.getElementById('pause-icon');
+    pauseAIBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        aiPaused = !aiPaused;
+        pauseIcon.textContent = aiPaused ? '▶' : '⏸'; // Play or pause symbol
+        
+        // If resuming, trigger next move
+        if (!aiPaused && gameState.gameMode === 'ai-vs-ai' && !gameState.gameOver) {
+            setTimeout(computerMove, 500 * getSpeedMultiplier());
+        }
+    });
+    
+    
+    // Speed control
+    const speedSlider = document.getElementById('speed-slider');
+    const speedDisplay = document.getElementById('speed-display');
+    
+    speedSlider.addEventListener('input', (e) => {
+        gameSpeed = parseInt(e.target.value);
+        speedDisplay.textContent = gameSpeed;
+    });
+    
+    // Settings toggle
+    const settingsToggle = document.getElementById('settings-toggle');
+    const settingsPanel = document.getElementById('settings-panel');
+    
+    settingsToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (settingsPanel.style.display === 'none' || settingsPanel.style.display === '') {
+            settingsPanel.style.display = 'flex';
+            settingsToggle.style.opacity = '1';
+        } else {
+            settingsPanel.style.display = 'none';
+            settingsToggle.style.opacity = '0.8';
+        }
+    });
+    
+    // Click outside to close settings
+    document.addEventListener('click', (e) => {
+        const controls = document.getElementById('controls');
+        if (!controls.contains(e.target) && settingsPanel.style.display === 'flex') {
+            settingsPanel.style.display = 'none';
+            settingsToggle.style.opacity = '0.8';
+        }
+    });
+    
+    // Prevent settings panel clicks from bubbling
+    settingsPanel.addEventListener('click', (e) => {
+        e.stopPropagation();
     });
 
 
@@ -1490,11 +1970,68 @@ function setupUIListeners() {
     });
 }
 
+// Touch event handlers for mobile
+let touchStartTime = 0;
+let touchStartPos = { x: 0, y: 0 };
+
+function onTouchStart(event) {
+    touchStartTime = Date.now();
+    if (event.touches.length === 1) {
+        touchStartPos.x = event.touches[0].clientX;
+        touchStartPos.y = event.touches[0].clientY;
+    }
+}
+
+function onTouchMove(event) {
+    if (event.touches.length === 1) {
+        // Update mouse position for hover effects
+        mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+    }
+}
+
+function onTouchEnd(event) {
+    const touchEndTime = Date.now();
+    const touchDuration = touchEndTime - touchStartTime;
+    
+    // Only register as a tap if it's a quick touch (less than 200ms) and hasn't moved much
+    if (touchDuration < 200 && event.changedTouches.length === 1) {
+        const touchEndPos = {
+            x: event.changedTouches[0].clientX,
+            y: event.changedTouches[0].clientY
+        };
+        
+        const distance = Math.sqrt(
+            Math.pow(touchEndPos.x - touchStartPos.x, 2) + 
+            Math.pow(touchEndPos.y - touchStartPos.y, 2)
+        );
+        
+        // If finger hasn't moved much, treat as a click
+        if (distance < 10) {
+            mouse.x = (touchEndPos.x / window.innerWidth) * 2 - 1;
+            mouse.y = -(touchEndPos.y / window.innerHeight) * 2 + 1;
+            onMouseClick();
+        }
+    }
+}
+
 // Window resize handler
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    // Update minimap size
+    const minimapContainer = document.getElementById('cube-minimap');
+    if (minimapContainer && minimapRenderer) {
+        let minimapSize = Math.min(minimapContainer.offsetWidth, minimapContainer.offsetHeight) - 20;
+        if (minimapSize <= 0) {
+            minimapSize = 180; // Default size if container not ready
+        }
+        minimapRenderer.setSize(minimapSize, minimapSize);
+        minimapCamera.aspect = 1;
+        minimapCamera.updateProjectionMatrix();
+    }
 }
 
 // Update move trail highlighting
@@ -1576,21 +2113,62 @@ function animate() {
 
 
 
-// Sync minimap camera to main camera orientation and zoom
+// Sync minimap camera to main camera orientation only (not zoom)
 function syncMinimapToMain() {
     if (!minimapCamera) return;
     
-    // Get main camera's relative direction and distance
+    // Get main camera's direction
     const mainDirection = camera.position.clone().sub(controls.target).normalize();
-    const mainDistance = camera.position.distanceTo(controls.target);
     
-    // Scale the distance for minimap camera
-    const scaleFactor = 1/2; // Half scale for minimap
-    const newMinimapDistance = mainDistance * scaleFactor;
-    const newMinimapPosition = mainDirection.multiplyScalar(newMinimapDistance);
+    // Use the separate minimap zoom level
+    const newMinimapPosition = mainDirection.multiplyScalar(minimapZoom);
     
     minimapCamera.position.copy(newMinimapPosition);
     minimapCamera.lookAt(0, 0, 0);
+    
+    // Ensure the minimap maintains proper up direction
+    minimapCamera.up.copy(camera.up);
+}
+
+// Add drag functionality to minimap
+function addMinimapDragFunctionality() {
+    const minimapContainer = document.getElementById('cube-minimap');
+    let isDragging = false;
+    let startX, startY, initialLeft, initialTop;
+    
+    minimapContainer.addEventListener('mousedown', function(e) {
+        // Check if clicking on the minimap canvas itself (not for dragging)
+        if (e.target.tagName === 'CANVAS') return;
+        
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        
+        // Get current position
+        const rect = minimapContainer.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(minimapContainer);
+        initialLeft = parseInt(computedStyle.left) || rect.left;
+        initialTop = parseInt(computedStyle.top) || rect.top;
+        
+        // Prevent text selection while dragging
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        
+        // Calculate new position
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+        
+        // Update position
+        minimapContainer.style.left = (initialLeft + deltaX) + 'px';
+        minimapContainer.style.top = (initialTop + deltaY) + 'px';
+    });
+    
+    document.addEventListener('mouseup', function() {
+        isDragging = false;
+    });
 }
 
 // Initialize the game
