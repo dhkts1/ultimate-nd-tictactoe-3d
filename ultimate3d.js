@@ -17,10 +17,6 @@ let minimapScene, minimapCamera, minimapRenderer;
 let minimapCubes = [];
 let minimapRaycaster, minimapMouse;
 let minimapControls;
-let lastMainCameraPosition = new THREE.Vector3();
-let lastMinimapCameraPosition = new THREE.Vector3();
-let isSyncingFromMinimap = false;
-let minimapScaleFactor = 1/2; // Adjustable scale factor for minimap zoom
 
 // Constants
 const CUBE_SIZE = 3;
@@ -1579,60 +1575,6 @@ function animate() {
 }
 
 
-// Sync cameras bidirectionally
-function syncCameras() {
-    if (!minimapControls || !controls) return;
-    
-    const movementThreshold = 0.01;
-    const currentMainPos = camera.position.clone();
-    const currentMinimapPos = minimapCamera.position.clone();
-    
-    const mainMoved = lastMainCameraPosition.distanceTo(currentMainPos) > movementThreshold;
-    const minimapMoved = lastMinimapCameraPosition.distanceTo(currentMinimapPos) > movementThreshold;
-    
-    // If both moved, prioritize the one that moved more
-    if (mainMoved && minimapMoved) {
-        const mainMovement = lastMainCameraPosition.distanceTo(currentMainPos);
-        const minimapMovement = lastMinimapCameraPosition.distanceTo(currentMinimapPos);
-        
-        if (minimapMovement > mainMovement && !isSyncingFromMinimap) {
-            // Minimap moved more, sync main to minimap
-            syncMainToMinimap();
-        } else if (mainMovement > minimapMovement && isSyncingFromMinimap) {
-            // Main moved more, sync minimap to main
-            syncMinimapToMain();
-        }
-    } else if (minimapMoved && !isSyncingFromMinimap) {
-        // Only minimap moved, sync main camera
-        syncMainToMinimap();
-    } else if (mainMoved && isSyncingFromMinimap) {
-        // Only main moved, sync minimap camera
-        syncMinimapToMain();
-    }
-    
-    // Update last positions
-    lastMainCameraPosition.copy(currentMainPos);
-    lastMinimapCameraPosition.copy(currentMinimapPos);
-}
-
-// Sync main camera to minimap orientation and zoom
-function syncMainToMinimap() {
-    isSyncingFromMinimap = true;
-    
-    // Get minimap camera's relative direction and distance
-    const minimapDirection = minimapCamera.position.clone().normalize();
-    const minimapDistance = minimapCamera.position.length();
-    
-    // Scale the distance for main camera (minimap distance * scale factor)
-    const scaleFactor = 3; // Adjust this to change zoom relationship
-    const newMainDistance = minimapDistance * scaleFactor;
-    const newMainPosition = controls.target.clone().add(minimapDirection.multiplyScalar(newMainDistance));
-    
-    camera.position.copy(newMainPosition);
-    controls.update();
-    
-    setTimeout(() => { isSyncingFromMinimap = false; }, 100);
-}
 
 // Sync minimap camera to main camera orientation and zoom
 function syncMinimapToMain() {
