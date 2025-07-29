@@ -17,6 +17,7 @@ let animationSpeed = 100; // Animation speed percentage (50-200%)
 let frameCount = 0;
 let lastFPSUpdate = Date.now();
 let currentFPS = 0;
+let navigationArrows = null; // Navigation arrows for cube selection mode
 
 // Minimap 3D variables
 let minimapScene, minimapCamera, minimapRenderer;
@@ -37,9 +38,9 @@ if (screenSize < 600) { // Mobile
 }
 
 const CUBE_SIZE = 3;
-const CELL_SIZE = 0.4 * sizeFactor; // Bigger cells on smaller screens
-const CELL_SPACING = 0.25;
-const CUBE_SPACING = 1.0 / sizeFactor; // Minimal spacing between cubes
+const CELL_SIZE = 0.6 * sizeFactor; // Bigger cells on smaller screens
+const CELL_SPACING = 1.5;
+const CUBE_SPACING = 6.0 * sizeFactor; // Increased spacing between cubes
 const TOTAL_CUBES = 27;
 const DEBUG_MODE = false; // Set to true to enable console logging
 
@@ -372,10 +373,10 @@ function init() {
     // Camera setup - much closer default zoom
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000); // Increased far plane
     // Calculate the bounding box of all cubes
-    // Each cube has size CUBE_SIZE * CELL_SIZE * 3 (3x3x3 cells)
-    const cubeActualSize = CUBE_SIZE * CELL_SIZE * 3;
+    // Each cube has cells with spacing between them
+    const cubeActualSize = 3 * CELL_SIZE + 2 * CELL_SPACING;
     // Total structure size: 3 cubes + 2 gaps between them
-    const structureSize = cubeActualSize * 3 + CUBE_SPACING * CELL_SIZE * 3 * 2;
+    const structureSize = cubeActualSize * 3 + CUBE_SPACING * 2;
     
     // Since camera is positioned diagonally, we need to account for the diagonal view
     // The diagonal distance is sqrt(3) times larger
@@ -427,8 +428,13 @@ function init() {
     controls.maxPolarAngle = Math.PI; // Allow rotation to bottom
 
     // Much brighter and more even lighting - no reflections
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     scene.add(ambientLight);
+    
+    // Add another directional light for better visibility
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(5, 10, 5);
+    scene.add(directionalLight);
 
     const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight1.position.set(20, 20, 10);
@@ -462,6 +468,8 @@ function init() {
     // Event listeners
     window.addEventListener('resize', onWindowResize);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
+    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    renderer.domElement.addEventListener('mouseup', onMouseUp);
     renderer.domElement.addEventListener('click', onMouseClick);
     
     // Add touch support for mobile
@@ -492,9 +500,10 @@ function createCubes() {
         const row = Math.floor((i % 9) / 3);
         const col = i % 3;
         
-        const cubeX = (col - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
-        const cubeY = (layer - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3 + 1;
-        const cubeZ = (row - 1) * (CUBE_SIZE + CUBE_SPACING) * CELL_SIZE * 3;
+        const actualCubeSize = 3 * CELL_SIZE + 2 * CELL_SPACING;
+        const cubeX = (col - 1) * (actualCubeSize + CUBE_SPACING);
+        const cubeY = (layer - 1) * (actualCubeSize + CUBE_SPACING) + 1;
+        const cubeZ = (row - 1) * (actualCubeSize + CUBE_SPACING);
         
         // Debug cube positioning
         if (DEBUG_MODE) console.log(`Cube ${i}: layer=${layer}, row=${row}, col=${col} -> position=(${cubeX.toFixed(2)}, ${cubeY.toFixed(2)}, ${cubeZ.toFixed(2)})`);
@@ -524,6 +533,10 @@ function createCubes() {
                     cell.position.x = (x - 1) * (CELL_SIZE + CELL_SPACING);
                     cell.position.y = (y - 1) * (CELL_SIZE + CELL_SPACING);
                     cell.position.z = (z - 1) * (CELL_SIZE + CELL_SPACING);
+                    
+                    // Make cells visually bigger
+                    cell.scale.set(1.3, 1.3, 1.3);
+                    
                     // Shadows disabled for better visibility
                     
                     const cellIndex = z * 9 + y * 3 + x;
@@ -706,6 +719,27 @@ function makeMove(cubeIndex, cellIndex) {
     
     // Animate mark
     animateMark(mark);
+    
+    // Brief flash for AI moves
+    if ((gameState.gameMode === 'single' && gameState.currentPlayer === 'O') || 
+        gameState.gameMode === 'ai-vs-ai') {
+        // Flash the cell briefly
+        const originalColor = cell.material.color.getHex();
+        const originalEmissive = cell.material.emissive.getHex();
+        const originalIntensity = cell.material.emissiveIntensity;
+        
+        // Bright flash
+        cell.material.color.setHex(0xffff00); // Yellow
+        cell.material.emissive.setHex(0xffff00);
+        cell.material.emissiveIntensity = 0.8;
+        
+        // Restore after brief delay (scaled by animation speed)
+        setTimeout(() => {
+            cell.material.color.setHex(originalColor);
+            cell.material.emissive.setHex(originalEmissive);
+            cell.material.emissiveIntensity = originalIntensity;
+        }, 150 * (100 / animationSpeed)); // 150ms at normal speed
+    }
     
     // Update cell state
     cell.userData.occupied = true;
@@ -943,9 +977,9 @@ function highlightCube(cubeIndex) {
     
     // Only add wireframe border (no cell brightening)
     const frameGeometry = new THREE.BoxGeometry(
-        3 * CELL_SIZE + 3 * CELL_SPACING,
-        3 * CELL_SIZE + 3 * CELL_SPACING,
-        3 * CELL_SIZE + 3 * CELL_SPACING
+        3 * CELL_SIZE + 2.2 * CELL_SPACING,
+        3 * CELL_SIZE + 2.2 * CELL_SPACING,
+        3 * CELL_SIZE + 2.2 * CELL_SPACING
     );
     const frameEdges = new THREE.EdgesGeometry(frameGeometry);
     const frameMaterial = new THREE.LineBasicMaterial({
@@ -963,27 +997,728 @@ function highlightCube(cubeIndex) {
 
 // Mouse handlers
 let hoveredCell = null;
+let selectedCell = null;
+let cellHighlight = null;
+let isInCellSelectionMode = false;
+let selectedCube = null;
+let cubeHighlight = null;
+// Keep track of highlighted adjacent cells
+let highlightedAdjacentCells = [];
+// Keep track of last AI move for highlighting
+let lastAIMove = null;
+
+
+// Create highlight for selected cell
+function createCellHighlight() {
+    if (cellHighlight) {
+        scene.remove(cellHighlight);
+        cellHighlight.geometry.dispose();
+        cellHighlight.material.dispose();
+    }
+    
+    // Create a box outline that's slightly larger than a cell
+    const highlightSize = CELL_SIZE * 2.1;
+    const highlightGeometry = new THREE.BoxGeometry(highlightSize, highlightSize, highlightSize);
+    const highlightEdges = new THREE.EdgesGeometry(highlightGeometry);
+    const highlightMaterial = new THREE.LineBasicMaterial({
+        color: 0xffff00, // Bright yellow
+        linewidth: 5, // Thicker lines
+        transparent: true,
+        opacity: 1.0
+    });
+    
+    cellHighlight = new THREE.LineSegments(highlightEdges, highlightMaterial);
+    
+    // Add a glowing effect
+    const glowGeometry = new THREE.BoxGeometry(highlightSize * 1.05, highlightSize * 1.05, highlightSize * 1.05);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffff00,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.BackSide
+    });
+    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+    cellHighlight.add(glowMesh);
+    return cellHighlight;
+}
+
+// Create highlight for selected cube
+function createCubeHighlight() {
+    // Create a wireframe box that encompasses the entire cube
+    const cubeSize = 3 * CELL_SIZE + 2 * CELL_SPACING;
+    const highlightGeometry = new THREE.BoxGeometry(cubeSize * 1.02, cubeSize * 1.02, cubeSize * 1.02);
+    const highlightMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffff00, // Yellow highlight
+        transparent: true,
+        opacity: 0.3,
+        wireframe: true
+    });
+    
+    const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
+    return highlight;
+}
+
+// Update selected cell
+function selectCell(cell, updateHighlight = true) {
+    // Reset ALL cell scales first to ensure only one is selected
+    cells.forEach(c => {
+        if (!c.userData.occupied && c !== cell) {
+            c.scale.set(1.3, 1.3, 1.3);
+        }
+    });
+    
+    // Reset previous selected cell scale
+    if (selectedCell && selectedCell !== cell) {
+        selectedCell.scale.set(1.3, 1.3, 1.3);
+    }
+    
+    selectedCell = cell;
+    
+    if (selectedCell) {
+        if (!cellHighlight) {
+            cellHighlight = createCellHighlight();
+            scene.add(cellHighlight);
+        }
+        
+        // Make selected cell slightly bigger
+        selectedCell.scale.set(1.5, 1.5, 1.5);
+        
+        // Only update highlight position on initial selection
+        if (updateHighlight) {
+            // Get cell world position after scaling
+            const cellPos = new THREE.Vector3();
+            selectedCell.getWorldPosition(cellPos);
+            
+            // Update the highlight to match the cell position exactly
+            cellHighlight.position.copy(cellPos);
+            cellHighlight.visible = true;
+            
+            // Match the cell's world rotation as well
+            const cellRotation = new THREE.Quaternion();
+            selectedCell.getWorldQuaternion(cellRotation);
+            cellHighlight.quaternion.copy(cellRotation);
+        }
+        
+        // Update navigation arrows
+        updateNavigationArrows();
+        // Highlight adjacent cubes
+        highlightAdjacentCubes(selectedCell.userData.cubeIndex);
+    } else {
+        if (cellHighlight) {
+            cellHighlight.visible = false;
+        }
+        
+        // Reset all cell scales
+        cells.forEach(cell => {
+            if (!cell.userData.occupied) {
+                cell.scale.set(1.3, 1.3, 1.3);
+            }
+        });
+        
+        // Hide navigation arrows
+        if (navigationArrows) {
+            navigationArrows.forEach(arrow => {
+                arrow.group.visible = false;
+            });
+        }
+        // Reset adjacent cube highlighting
+        resetAdjacentCubeHighlighting();
+    }
+}
+
+// Highlight adjacent cells
+function highlightAdjacentCubes(currentCubeIndex) {
+    // Reset previous adjacent cell highlighting
+    resetAdjacentCubeHighlighting();
+    
+    // If we have a selected cell, highlight adjacent cells within the same cube or neighboring cubes
+    if (selectedCell) {
+        const cellX = selectedCell.userData.x;
+        const cellY = selectedCell.userData.y;
+        const cellZ = selectedCell.userData.z;
+        const cubeIndex = selectedCell.userData.cubeIndex;
+        
+        // Check all 6 directions for adjacent cells
+        const directions = [
+            {dx: -1, dy: 0, dz: 0}, // left
+            {dx: 1, dy: 0, dz: 0},  // right
+            {dx: 0, dy: -1, dz: 0}, // down
+            {dx: 0, dy: 1, dz: 0},  // up
+            {dx: 0, dy: 0, dz: -1}, // forward
+            {dx: 0, dy: 0, dz: 1}   // back
+        ];
+        
+        directions.forEach(({dx, dy, dz}) => {
+            let targetX = cellX + dx;
+            let targetY = cellY + dy;
+            let targetZ = cellZ + dz;
+            let targetCubeIndex = cubeIndex;
+            
+            // Check if we need to move to adjacent cube
+            // Only allow cross-cube movement if we're restricted to a single cube
+            if (gameState.activeCubes !== null) {
+                if (targetX < 0) {
+                    targetCubeIndex = getCubeInDirection(cubeIndex, 'left');
+                    targetX = 2;
+                } else if (targetX > 2) {
+                    targetCubeIndex = getCubeInDirection(cubeIndex, 'right');
+                    targetX = 0;
+                } else if (targetY < 0) {
+                    targetCubeIndex = getCubeInDirection(cubeIndex, 'down');
+                    targetY = 2;
+                } else if (targetY > 2) {
+                    targetCubeIndex = getCubeInDirection(cubeIndex, 'up');
+                    targetY = 0;
+                } else if (targetZ < 0) {
+                    targetCubeIndex = getCubeInDirection(cubeIndex, 'forward');
+                    targetZ = 2;
+                } else if (targetZ > 2) {
+                    targetCubeIndex = getCubeInDirection(cubeIndex, 'backward');
+                    targetZ = 0;
+                }
+            } else {
+                // When all cubes are selectable, only highlight within the same cube
+                // Don't highlight cells outside the current cube
+                if (targetX < 0 || targetX > 2 || targetY < 0 || targetY > 2 || targetZ < 0 || targetZ > 2) {
+                    targetCubeIndex = -1; // Mark as invalid
+                }
+            }
+            
+            // Highlight the adjacent cell if it exists and is valid
+            if (targetCubeIndex !== -1 && targetCubeIndex < TOTAL_CUBES && cubes[targetCubeIndex]) {
+                const targetCellIndex = targetZ * 9 + targetY * 3 + targetX;
+                const targetCell = cubes[targetCubeIndex].cells[targetCellIndex];
+                
+                if (targetCell && targetCell.material && !targetCell.userData.occupied && 
+                    targetCell !== hoveredCell && targetCell !== selectedCell &&
+                    isValidMove(targetCubeIndex, targetCellIndex)) {
+                    // Make adjacent cells bright orange but see-through
+                    if (targetCell.material.emissive) {
+                        targetCell.material.emissive.setHex(0xff6600); // Orange
+                        targetCell.material.emissiveIntensity = 0.5;
+                    }
+                    targetCell.material.color.setHex(0xff8800); // Brighter orange base color
+                    targetCell.material.opacity = 0.3; // 30% opacity - see through
+                    targetCell.material.transparent = true;
+                    
+                    // Track this cell as highlighted
+                    highlightedAdjacentCells.push(targetCell);
+                }
+            }
+        });
+    }
+}
+
+// Reset adjacent cube highlighting
+function resetAdjacentCubeHighlighting() {
+    // Only reset cells that were previously highlighted as adjacent
+    highlightedAdjacentCells.forEach(cell => {
+        if (cell && cell.material && !cell.userData.occupied) {
+            cell.material.color.setHex(CUBE_COLOR); // Reset base color
+            if (cell.material.emissive) {
+                cell.material.emissive.setHex(CUBE_COLOR);
+                cell.material.emissiveIntensity = 0.1;
+            }
+            cell.material.opacity = 0.4; // Reset to original opacity
+            cell.material.transparent = true;
+        }
+    });
+    highlightedAdjacentCells = [];
+}
+
+// Get next valid cell in a direction
+function getNextValidCell(currentCell, direction) {
+    if (!currentCell) return null;
+    
+    const cubeIndex = currentCell.userData.cubeIndex;
+    const cellIndex = currentCell.userData.cellIndex;
+    const x = currentCell.userData.x;
+    const y = currentCell.userData.y;
+    const z = currentCell.userData.z;
+    
+    let newX = x, newY = y, newZ = z;
+    
+    // Try to move within the same cube first
+    switch(direction) {
+        case 'left': newX = x - 1; break;
+        case 'right': newX = x + 1; break;
+        case 'up': newY = y + 1; break;
+        case 'down': newY = y - 1; break;
+        case 'forward': newZ = z - 1; break;
+        case 'backward': newZ = z + 1; break;
+    }
+    
+    // Check if still within the same cube
+    if (newX >= 0 && newX < 3 && newY >= 0 && newY < 3 && newZ >= 0 && newZ < 3) {
+        const newCellIndex = newZ * 9 + newY * 3 + newX;
+        const targetCell = cubes[cubeIndex].cells[newCellIndex];
+        if (targetCell && !targetCell.userData.occupied && isValidMove(cubeIndex, newCellIndex)) {
+            return targetCell;
+        }
+    }
+    
+    // If can't move within cube, try to find next valid cell in any active cube
+    const validCells = [];
+    if (gameState.activeCubes === null) {
+        // All cubes are active
+        cells.forEach(cell => {
+            if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
+                validCells.push(cell);
+            }
+        });
+    } else {
+        // Only specific cubes are active
+        gameState.activeCubes.forEach(activeCubeIndex => {
+            const cube = cubes[activeCubeIndex];
+            if (cube && cube.cells) {
+                cube.cells.forEach(cell => {
+                    if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
+                        validCells.push(cell);
+                    }
+                });
+            }
+        });
+    }
+    
+    // Find the closest valid cell in the direction
+    if (validCells.length > 0) {
+        const currentPos = new THREE.Vector3();
+        currentCell.getWorldPosition(currentPos);
+        
+        let bestCell = null;
+        let bestScore = -Infinity;
+        
+        const dirVector = new THREE.Vector3();
+        switch(direction) {
+            case 'left': dirVector.set(-1, 0, 0); break;
+            case 'right': dirVector.set(1, 0, 0); break;
+            case 'up': dirVector.set(0, 1, 0); break;
+            case 'down': dirVector.set(0, -1, 0); break;
+            case 'forward': dirVector.set(0, 0, -1); break;
+            case 'backward': dirVector.set(0, 0, 1); break;
+        }
+        
+        validCells.forEach(cell => {
+            const cellPos = new THREE.Vector3();
+            cell.getWorldPosition(cellPos);
+            const toCell = cellPos.clone().sub(currentPos).normalize();
+            const score = toCell.dot(dirVector);
+            
+            if (score > bestScore && score > 0.1) { // Only consider cells roughly in the right direction
+                bestScore = score;
+                bestCell = cell;
+            }
+        });
+        
+        return bestCell;
+    }
+    
+    return null;
+}
+
+// Get cube index in a given direction
+function getCubeInDirection(currentIndex, direction) {
+    const x = currentIndex % 3;
+    const y = Math.floor(currentIndex / 3) % 3;
+    const z = Math.floor(currentIndex / 9);
+    
+    let newX = x, newY = y, newZ = z;
+    
+    switch(direction) {
+        case 'left': newX = x - 1; break;
+        case 'right': newX = x + 1; break;
+        case 'up': newY = y + 1; break;
+        case 'down': newY = y - 1; break;
+        case 'forward': newZ = z - 1; break;
+        case 'backward': newZ = z + 1; break;
+    }
+    
+    // Check bounds
+    if (newX < 0 || newX > 2 || newY < 0 || newY > 2 || newZ < 0 || newZ > 2) {
+        return -1;
+    }
+    
+    return newZ * 9 + newY * 3 + newX;
+}
+
+// Update selected cube
+function selectCube(cubeIndex) {
+    if (cubeIndex === selectedCube) return;
+    
+    selectedCube = cubeIndex;
+    
+    if (selectedCube !== null && cubes && cubes[selectedCube]) {
+        if (!cubeHighlight) {
+            cubeHighlight = createCubeHighlight();
+            scene.add(cubeHighlight);
+        }
+        
+        if (!navigationArrows) {
+            createNavigationArrows();
+        }
+        
+        // Position highlight at the selected cube
+        const cube = cubes[selectedCube];
+        if (cube && cube.group && cube.group.position) {
+            cubeHighlight.position.copy(cube.group.position);
+            cubeHighlight.visible = true;
+        }
+        
+        // Update navigation arrows
+        updateNavigationArrows();
+        
+        // Make selected cube's cells slightly brighter
+        if (cube.cells) {
+            cube.cells.forEach(cell => {
+                if (cell.material) {
+                    cell.material.emissiveIntensity = 0.2;
+                }
+            });
+        }
+    } else {
+        if (cubeHighlight) {
+            cubeHighlight.visible = false;
+        }
+        
+        if (navigationArrows) {
+            navigationArrows.forEach(arrow => {
+                arrow.group.visible = false;
+            });
+        }
+        
+        // Reset all cubes' brightness
+        if (cubes) {
+            cubes.forEach(cube => {
+                if (cube && cube.cells) {
+                    cube.cells.forEach(cell => {
+                        if (cell.material && !cubesWithWinLines.has(cube.userData ? cube.userData.index : -1)) {
+                            cell.material.emissiveIntensity = 0.1;
+                        }
+                    });
+                }
+            });
+        }
+    }
+}
+
+// Toggle cell selection mode
+function toggleCellSelectionMode() {
+    isInCellSelectionMode = !isInCellSelectionMode;
+    
+    const indicator = document.getElementById('cube-selection-indicator');
+    
+    if (!isInCellSelectionMode) {
+        // Clear selection when exiting mode
+        selectCell(null);
+        if (indicator) indicator.style.display = 'none';
+    } else {
+        // Only find first valid cell if no cell is already selected
+        if (!selectedCell) {
+            let firstValidCell = null;
+            
+            if (gameState.activeCubes === null) {
+                // All cubes are active - find any valid cell
+                for (let i = 0; i < cells.length; i++) {
+                    if (!cells[i].userData.occupied && isValidMove(cells[i].userData.cubeIndex, cells[i].userData.cellIndex)) {
+                        firstValidCell = cells[i];
+                        break;
+                    }
+                }
+            } else {
+                // Specific cubes are active
+                const cubeIndex = gameState.activeCubes;
+                const cube = cubes[cubeIndex];
+                if (cube && cube.cells) {
+                    for (const cell of cube.cells) {
+                        if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
+                            firstValidCell = cell;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (firstValidCell) {
+                selectCell(firstValidCell);
+            }
+        }
+        
+        if (indicator) indicator.style.display = 'block';
+    }
+}
+
+// Create navigation arrows for cube selection
+function createNavigationArrows() {
+    navigationArrows = [];
+    
+    // Define arrow directions and positions
+    const arrowData = [
+        { name: 'up', direction: new THREE.Vector3(0, 1, 0), rotation: -Math.PI / 2 },
+        { name: 'down', direction: new THREE.Vector3(0, -1, 0), rotation: Math.PI / 2 },
+        { name: 'left', direction: new THREE.Vector3(-1, 0, 0), rotation: 0 },
+        { name: 'right', direction: new THREE.Vector3(1, 0, 0), rotation: Math.PI },
+        { name: 'forward', direction: new THREE.Vector3(0, 0, -1), rotation: Math.PI / 2 },
+        { name: 'back', direction: new THREE.Vector3(0, 0, 1), rotation: -Math.PI / 2 }
+    ];
+    
+    arrowData.forEach(data => {
+        const arrowGroup = new THREE.Group();
+        
+        // Create arrow cone
+        const coneGeometry = new THREE.ConeGeometry(0.2, 0.4, 8);
+        const coneMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.8 
+        });
+        const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+        
+        // Create arrow cylinder
+        const cylinderGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.4, 8);
+        const cylinderMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.8 
+        });
+        const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+        
+        // Position cone and cylinder to form arrow
+        cone.position.y = 0.4;
+        cylinder.position.y = 0;
+        
+        arrowGroup.add(cone);
+        arrowGroup.add(cylinder);
+        
+        // Rotate arrow to point in the correct direction
+        if (data.name === 'left' || data.name === 'right') {
+            arrowGroup.rotation.z = data.rotation;
+        } else if (data.name === 'forward' || data.name === 'back') {
+            arrowGroup.rotation.x = data.rotation;
+        } else {
+            arrowGroup.rotation.x = data.rotation;
+        }
+        
+        arrowGroup.visible = false;
+        scene.add(arrowGroup);
+        
+        navigationArrows.push({
+            name: data.name,
+            direction: data.direction,
+            group: arrowGroup,
+            cone: cone,
+            cylinder: cylinder
+        });
+    });
+}
+
+// Update navigation arrows visibility and position
+function updateNavigationArrows() {
+    if (!navigationArrows || !selectedCell) return;
+    
+    const cellData = selectedCell.userData;
+    const cellX = cellData.x;
+    const cellY = cellData.y;
+    const cellZ = cellData.z;
+    const cubeIndex = cellData.cubeIndex;
+    
+    // Get cell world position
+    const cellPos = new THREE.Vector3();
+    selectedCell.getWorldPosition(cellPos);
+    
+    // Position arrows around the selected cell
+    const offset = 0.8; // Distance from cell center
+    
+    navigationArrows.forEach(arrow => {
+        // Calculate target cell position based on direction
+        let targetX = cellX, targetY = cellY, targetZ = cellZ, targetCubeIndex = cubeIndex;
+        
+        switch(arrow.name) {
+            case 'left': 
+                targetX = cellX - 1;
+                if (targetX < 0) {
+                    // Move to adjacent cube if possible
+                    const adjacentCube = getCubeInDirection(cubeIndex, 'left');
+                    if (adjacentCube !== -1) {
+                        targetCubeIndex = adjacentCube;
+                        targetX = 2; // Rightmost cell of left cube
+                    }
+                }
+                break;
+            case 'right': 
+                targetX = cellX + 1;
+                if (targetX > 2) {
+                    const adjacentCube = getCubeInDirection(cubeIndex, 'right');
+                    if (adjacentCube !== -1) {
+                        targetCubeIndex = adjacentCube;
+                        targetX = 0; // Leftmost cell of right cube
+                    }
+                }
+                break;
+            case 'up': 
+                targetY = cellY + 1;
+                if (targetY > 2) {
+                    const adjacentCube = getCubeInDirection(cubeIndex, 'up');
+                    if (adjacentCube !== -1) {
+                        targetCubeIndex = adjacentCube;
+                        targetY = 0; // Bottom cell of upper cube
+                    }
+                }
+                break;
+            case 'down': 
+                targetY = cellY - 1;
+                if (targetY < 0) {
+                    const adjacentCube = getCubeInDirection(cubeIndex, 'down');
+                    if (adjacentCube !== -1) {
+                        targetCubeIndex = adjacentCube;
+                        targetY = 2; // Top cell of lower cube
+                    }
+                }
+                break;
+            case 'forward': 
+                targetZ = cellZ - 1;
+                if (targetZ < 0) {
+                    const adjacentCube = getCubeInDirection(cubeIndex, 'forward');
+                    if (adjacentCube !== -1) {
+                        targetCubeIndex = adjacentCube;
+                        targetZ = 2; // Back cell of forward cube
+                    }
+                }
+                break;
+            case 'back': 
+                targetZ = cellZ + 1;
+                if (targetZ > 2) {
+                    const adjacentCube = getCubeInDirection(cubeIndex, 'backward');
+                    if (adjacentCube !== -1) {
+                        targetCubeIndex = adjacentCube;
+                        targetZ = 0; // Front cell of back cube
+                    }
+                }
+                break;
+        }
+        
+        // Check if the target cell is valid
+        let isValidTarget = false;
+        if (targetX >= 0 && targetX <= 2 && targetY >= 0 && targetY <= 2 && targetZ >= 0 && targetZ <= 2) {
+            if (targetCubeIndex >= 0 && targetCubeIndex < TOTAL_CUBES) {
+                const targetCellIndex = targetZ * 9 + targetY * 3 + targetX;
+                if (isValidMove(targetCubeIndex, targetCellIndex)) {
+                    isValidTarget = true;
+                }
+            }
+        }
+        
+        if (isValidTarget) {
+            // Position arrow
+            const arrowPos = cellPos.clone();
+            arrowPos.add(arrow.direction.clone().multiplyScalar(offset));
+            arrow.group.position.copy(arrowPos);
+            arrow.group.visible = true;
+            
+            // Scale arrows down since they're for cells, not cubes
+            arrow.group.scale.set(0.5, 0.5, 0.5);
+        } else {
+            arrow.group.visible = false;
+        }
+    });
+}
 
 function onMouseMove(event) {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
 
     raycaster.setFromCamera(mouse, camera);
+    
+    // Always check for cell hover, regardless of selection mode
     const intersects = raycaster.intersectObjects(cells);
 
-    // Reset hover state
+    // Reset hover state - but preserve adjacent cell highlighting
+    if (hoveredCell && hoveredCell.material) {
+        // Check if this cell should remain highlighted as an adjacent cell
+        let isAdjacentCell = false;
+        if (selectedCell) {
+            const cellX = selectedCell.userData.x;
+            const cellY = selectedCell.userData.y;
+            const cellZ = selectedCell.userData.z;
+            const cubeIndex = selectedCell.userData.cubeIndex;
+            
+            // Check if hoveredCell is adjacent to selectedCell
+            const hovX = hoveredCell.userData.x;
+            const hovY = hoveredCell.userData.y;
+            const hovZ = hoveredCell.userData.z;
+            const hovCubeIndex = hoveredCell.userData.cubeIndex;
+            
+            // Check same cube adjacency
+            if (cubeIndex === hovCubeIndex) {
+                const dx = Math.abs(cellX - hovX);
+                const dy = Math.abs(cellY - hovY);
+                const dz = Math.abs(cellZ - hovZ);
+                if ((dx === 1 && dy === 0 && dz === 0) ||
+                    (dx === 0 && dy === 1 && dz === 0) ||
+                    (dx === 0 && dy === 0 && dz === 1)) {
+                    isAdjacentCell = true;
+                }
+            } else {
+                // Check cross-cube adjacency
+                if ((cellX === 0 && hovX === 2 && getCubeInDirection(cubeIndex, 'left') === hovCubeIndex) ||
+                    (cellX === 2 && hovX === 0 && getCubeInDirection(cubeIndex, 'right') === hovCubeIndex) ||
+                    (cellY === 0 && hovY === 2 && getCubeInDirection(cubeIndex, 'down') === hovCubeIndex) ||
+                    (cellY === 2 && hovY === 0 && getCubeInDirection(cubeIndex, 'up') === hovCubeIndex) ||
+                    (cellZ === 0 && hovZ === 2 && getCubeInDirection(cubeIndex, 'forward') === hovCubeIndex) ||
+                    (cellZ === 2 && hovZ === 0 && getCubeInDirection(cubeIndex, 'backward') === hovCubeIndex)) {
+                    isAdjacentCell = true;
+                }
+            }
+        }
+        
+        if (isAdjacentCell && highlightedAdjacentCells.includes(hoveredCell)) {
+            // Keep orange highlighting for adjacent cells
+            hoveredCell.material.color.setHex(0xff8800);
+            if (hoveredCell.material.emissive) {
+                hoveredCell.material.emissive.setHex(0xff6600);
+                hoveredCell.material.emissiveIntensity = 0.25;
+            }
+        } else {
+            // Reset to default
+            hoveredCell.material.color.setHex(CUBE_COLOR);
+            if (hoveredCell.material.emissive) {
+                hoveredCell.material.emissive.setHex(CUBE_COLOR);
+                hoveredCell.material.emissiveIntensity = 0.1;
+            }
+        }
+        hoveredCell.scale.set(1.3, 1.3, 1.3); // Keep at base size when resetting
+    }
+    
     cells.forEach(cell => {
         if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
-            cell.scale.set(1, 1, 1);
+            cell.scale.set(1.3, 1.3, 1.3);
         }
     });
 
     // Apply hover effect
     if (intersects.length > 0) {
         const cell = intersects[0].object;
+        
         if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
             hoveredCell = cell;
-            cell.scale.set(1.1, 1.1, 1.1);
+            
+            // Check if this cell is also highlighted as adjacent
+            const isAdjacentHighlighted = highlightedAdjacentCells.includes(cell);
+            
+            if (isAdjacentHighlighted) {
+                // Mixed color - purple (blue + orange)
+                cell.material.emissive.setHex(0x8844ff);
+                cell.material.emissiveIntensity = 0.5;
+                cell.material.color.setHex(0x9955ff);
+            } else {
+                // Normal blue hover
+                cell.material.emissive.setHex(0x0066ff);
+                cell.material.emissiveIntensity = 0.4;
+                // Keep the normal gray color for non-adjacent cells
+                cell.material.color.setHex(CUBE_COLOR);
+            }
+            
+            cell.scale.set(1.7, 1.7, 1.7);
             renderer.domElement.style.cursor = 'pointer';
         } else {
             hoveredCell = null;
@@ -993,14 +1728,170 @@ function onMouseMove(event) {
         hoveredCell = null;
         renderer.domElement.style.cursor = 'default';
     }
+    
+    // If in selection mode, also check for arrow hover
+    if (isInCellSelectionMode) {
+        const arrowObjects = [];
+        if (navigationArrows) {
+            navigationArrows.forEach(arrow => {
+                if (arrow.group.visible) {
+                    arrowObjects.push(arrow.cone, arrow.cylinder);
+                }
+            });
+        }
+        
+        const arrowIntersects = raycaster.intersectObjects(arrowObjects);
+        if (arrowIntersects.length > 0) {
+            renderer.domElement.style.cursor = 'pointer';
+        }
+    }
+}
+
+function onMouseDown(event) {
+}
+
+function onMouseUp(event) {
 }
 
 function onMouseClick() {
     // Don't allow clicks in AI vs AI mode
     if (gameState.gameMode === 'ai-vs-ai') return;
     
-    if (hoveredCell && !gameState.gameOver) {
-        makeMove(hoveredCell.userData.cubeIndex, hoveredCell.userData.cellIndex);
+    
+    if (!isInCellSelectionMode) {
+        // First click - use the hovered cell (the blue one)
+        if (!gameState.gameOver && hoveredCell) {
+            // Enter selection mode with the hovered cell
+            toggleCellSelectionMode();
+            selectCell(hoveredCell);
+            return;
+        }
+        // Don't enter selection mode if no cell is hovered
+    } else {
+        // In cube selection mode
+        raycaster.setFromCamera(mouse, camera);
+        
+        // Check if clicking on an arrow
+        const arrowObjects = [];
+        if (navigationArrows) {
+            navigationArrows.forEach(arrow => {
+                if (arrow.group.visible) {
+                    arrowObjects.push(arrow.cone, arrow.cylinder);
+                }
+            });
+        }
+        
+        const arrowIntersects = raycaster.intersectObjects(arrowObjects);
+        if (arrowIntersects.length > 0) {
+            // Find which arrow was clicked
+            const clickedObject = arrowIntersects[0].object;
+            const clickedArrow = navigationArrows.find(arrow => 
+                arrow.cone === clickedObject || arrow.cylinder === clickedObject
+            );
+            
+            if (clickedArrow && selectedCell) {
+                // Get current cell position
+                const cellData = selectedCell.userData;
+                let targetX = cellData.x, targetY = cellData.y, targetZ = cellData.z;
+                let targetCubeIndex = cellData.cubeIndex;
+                
+                // Calculate new cell position based on arrow direction
+                switch(clickedArrow.name) {
+                    case 'left': 
+                        targetX--;
+                        if (targetX < 0) {
+                            const adjacentCube = getCubeInDirection(targetCubeIndex, 'left');
+                            if (adjacentCube !== -1) {
+                                targetCubeIndex = adjacentCube;
+                                targetX = 2;
+                            }
+                        }
+                        break;
+                    case 'right': 
+                        targetX++;
+                        if (targetX > 2) {
+                            const adjacentCube = getCubeInDirection(targetCubeIndex, 'right');
+                            if (adjacentCube !== -1) {
+                                targetCubeIndex = adjacentCube;
+                                targetX = 0;
+                            }
+                        }
+                        break;
+                    case 'up': 
+                        targetY++;
+                        if (targetY > 2) {
+                            const adjacentCube = getCubeInDirection(targetCubeIndex, 'up');
+                            if (adjacentCube !== -1) {
+                                targetCubeIndex = adjacentCube;
+                                targetY = 0;
+                            }
+                        }
+                        break;
+                    case 'down': 
+                        targetY--;
+                        if (targetY < 0) {
+                            const adjacentCube = getCubeInDirection(targetCubeIndex, 'down');
+                            if (adjacentCube !== -1) {
+                                targetCubeIndex = adjacentCube;
+                                targetY = 2;
+                            }
+                        }
+                        break;
+                    case 'forward': 
+                        targetZ--;
+                        if (targetZ < 0) {
+                            const adjacentCube = getCubeInDirection(targetCubeIndex, 'forward');
+                            if (adjacentCube !== -1) {
+                                targetCubeIndex = adjacentCube;
+                                targetZ = 2;
+                            }
+                        }
+                        break;
+                    case 'back': 
+                        targetZ++;
+                        if (targetZ > 2) {
+                            const adjacentCube = getCubeInDirection(targetCubeIndex, 'backward');
+                            if (adjacentCube !== -1) {
+                                targetCubeIndex = adjacentCube;
+                                targetZ = 0;
+                            }
+                        }
+                        break;
+                }
+                
+                // Find and select the target cell
+                if (targetX >= 0 && targetX <= 2 && targetY >= 0 && targetY <= 2 && 
+                    targetZ >= 0 && targetZ <= 2 && targetCubeIndex >= 0 && targetCubeIndex < TOTAL_CUBES) {
+                    const targetCellIndex = targetZ * 9 + targetY * 3 + targetX;
+                    const targetCell = cubes[targetCubeIndex].cells[targetCellIndex];
+                    if (targetCell && !targetCell.userData.occupied && 
+                        isValidMove(targetCubeIndex, targetCellIndex)) {
+                        selectCell(targetCell, false); // Don't move yellow highlight
+                    }
+                }
+            }
+        } else {
+            // Check if clicking on any valid cell
+            const validCells = cells.filter(cell => 
+                !cell.userData.occupied && 
+                isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)
+            );
+            const cellIntersects = raycaster.intersectObjects(validCells);
+            
+            if (cellIntersects.length > 0) {
+                const cell = cellIntersects[0].object;
+                if (cell === selectedCell) {
+                    // Double-clicking on the already selected cell - make the move
+                    makeMove(cell.userData.cubeIndex, cell.userData.cellIndex);
+                    toggleCellSelectionMode();
+                } else {
+                    // Clicking on a different valid cell - move the selection
+                    selectCell(cell, true); // Update highlight to new position
+                }
+            } else {
+                // Clicking outside - do nothing, keep selection mode active
+            }
+        }
     }
 }
 
@@ -2179,29 +3070,50 @@ function setupUIListeners() {
 // Touch event handlers for mobile
 let touchStartTime = 0;
 let touchStartPos = { x: 0, y: 0 };
+let isTouching = false;
 
 function onTouchStart(event) {
+    event.preventDefault();
     touchStartTime = Date.now();
+    isTouching = true;
+    
     if (event.touches.length === 1) {
         touchStartPos.x = event.touches[0].clientX;
         touchStartPos.y = event.touches[0].clientY;
+        
+        // Update mouse position immediately
+        mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+        
+        // Update raycaster and find closest cube/cell
+        updateHoverStateForTouch();
     }
 }
 
 function onTouchMove(event) {
-    if (event.touches.length === 1) {
+    event.preventDefault();
+    
+    if (event.touches.length === 1 && isTouching) {
         // Update mouse position for hover effects
         mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+        
+        // Update hover state
+        updateHoverStateForTouch();
     }
 }
 
 function onTouchEnd(event) {
+    event.preventDefault();
+    
+    if (!isTouching) return;
+    isTouching = false;
+    
     const touchEndTime = Date.now();
     const touchDuration = touchEndTime - touchStartTime;
     
-    // Only register as a tap if it's a quick touch (less than 200ms) and hasn't moved much
-    if (touchDuration < 200 && event.changedTouches.length === 1) {
+    // More generous tap detection - up to 300ms and 20 pixel movement
+    if (touchDuration < 300 && event.changedTouches.length === 1) {
         const touchEndPos = {
             x: event.changedTouches[0].clientX,
             y: event.changedTouches[0].clientY
@@ -2213,12 +3125,233 @@ function onTouchEnd(event) {
         );
         
         // If finger hasn't moved much, treat as a click
-        if (distance < 10) {
+        if (distance < 20) {
+            // Update mouse position with final touch position
             mouse.x = (touchEndPos.x / window.innerWidth) * 2 - 1;
             mouse.y = -(touchEndPos.y / window.innerHeight) * 2 + 1;
-            onMouseClick();
+            
+            // Find closest interactive cell and make move
+            handleTouchClick();
         }
     }
+    
+    // Reset hover state
+    hoveredCell = null;
+    cells.forEach(cell => {
+        if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
+            cell.scale.set(1.3, 1.3, 1.3);
+        }
+    });
+}
+
+// Helper function to update hover state for touch
+function updateHoverStateForTouch() {
+    raycaster.setFromCamera(mouse, camera);
+    
+    if (!isInCellSelectionMode) {
+        // Normal mode - show hover on cells
+        const intersects = raycaster.intersectObjects(cells);
+        
+        // Reset hover state
+        if (hoveredCell && hoveredCell.material) {
+            hoveredCell.material.emissive.setHex(CUBE_COLOR);
+            hoveredCell.material.emissiveIntensity = 0.1;
+            hoveredCell.scale.set(1.3, 1.3, 1.3); // Keep at base size when resetting
+        }
+        
+        cells.forEach(cell => {
+            if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
+                cell.scale.set(1.3, 1.3, 1.3);
+            }
+        });
+        
+        if (intersects.length > 0) {
+            const cell = intersects[0].object;
+            
+            if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
+                hoveredCell = cell;
+                // Change color to blue for touch hover
+                cell.material.emissive.setHex(0x0066ff);
+                cell.material.emissiveIntensity = 0.4;
+                cell.scale.set(1.7, 1.7, 1.7);
+            } else {
+                hoveredCell = null;
+            }
+        } else {
+            // If no direct hit, find closest valid cell
+            hoveredCell = findClosestValidCell();
+            if (hoveredCell) {
+                hoveredCell.material.emissive.setHex(0x0066ff);
+                hoveredCell.material.emissiveIntensity = 0.4;
+                hoveredCell.scale.set(1.7, 1.7, 1.7);
+            }
+        }
+    }
+    // In cube selection mode, hover is handled by onMouseMove
+}
+
+// Helper function to handle touch clicks with smart cell detection
+function handleTouchClick() {
+    // Don't allow clicks in AI vs AI mode
+    if (gameState.gameMode === 'ai-vs-ai') return;
+    
+    if (!isInCellSelectionMode) {
+        // First touch - enter cube selection mode
+        if (!gameState.gameOver) {
+            toggleCellSelectionMode();
+        }
+    } else {
+        // In cube selection mode
+        raycaster.setFromCamera(mouse, camera);
+        
+        // Check if touching an arrow
+        const arrowObjects = [];
+        if (navigationArrows) {
+            navigationArrows.forEach(arrow => {
+                if (arrow.group.visible) {
+                    arrowObjects.push(arrow.cone, arrow.cylinder);
+                }
+            });
+        }
+        
+        const arrowIntersects = raycaster.intersectObjects(arrowObjects);
+        if (arrowIntersects.length > 0) {
+            // Find which arrow was touched
+            const touchedObject = arrowIntersects[0].object;
+            const touchedArrow = navigationArrows.find(arrow => 
+                arrow.cone === touchedObject || arrow.cylinder === touchedObject
+            );
+            
+            if (touchedArrow) {
+                const newCubeIndex = getCubeInDirection(selectedCube, touchedArrow.name);
+                if (newCubeIndex !== -1) {
+                    selectCube(newCubeIndex);
+                }
+            }
+        } else {
+            // Check if touching a cell in the selected cube
+            const selectedCubeCells = selectedCube !== null ? cubes[selectedCube].cells : [];
+            const cellIntersects = raycaster.intersectObjects(selectedCubeCells);
+            
+            if (cellIntersects.length > 0) {
+                const cell = cellIntersects[0].object;
+                if (!cell.userData.occupied && 
+                    isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex) && 
+                    !gameState.gameOver) {
+                    // Make the move and exit selection mode
+                    makeMove(cell.userData.cubeIndex, cell.userData.cellIndex);
+                    toggleCellSelectionMode();
+                }
+            } else {
+                // If no direct hit on selected cube, try finding closest cell in selected cube
+                const closestCell = findClosestValidCellInCube(selectedCube);
+                if (closestCell) {
+                    makeMove(closestCell.userData.cubeIndex, closestCell.userData.cellIndex);
+                    toggleCellSelectionMode();
+                } else {
+                    // Touching outside - do nothing, keep selection mode active
+                }
+            }
+        }
+    }
+}
+
+// Find the closest valid cell in a specific cube
+function findClosestValidCellInCube(cubeIndex) {
+    if (cubeIndex === null || !cubes[cubeIndex]) return null;
+    
+    const cubeCells = cubes[cubeIndex].cells;
+    const validCells = cubeCells.filter(cell => 
+        !cell.userData.occupied && 
+        isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)
+    );
+    
+    if (validCells.length === 0) return null;
+    
+    // Convert mouse position to 3D ray
+    const ray = new THREE.Vector3();
+    ray.set(mouse.x, mouse.y, 0.5);
+    ray.unproject(camera);
+    ray.sub(camera.position).normalize();
+    
+    // Find cell with minimum distance to ray
+    let closestCell = null;
+    let minDistance = Infinity;
+    
+    validCells.forEach(cell => {
+        // Get cell world position
+        const cellPos = new THREE.Vector3();
+        cell.getWorldPosition(cellPos);
+        
+        // Calculate distance from ray to cell
+        const rayToCellDir = cellPos.clone().sub(camera.position);
+        const angle = ray.angleTo(rayToCellDir);
+        const distance = Math.sin(angle) * rayToCellDir.length();
+        
+        // Also consider screen space distance for better accuracy
+        const screenPos = cellPos.clone().project(camera);
+        const screenDist = Math.sqrt(
+            Math.pow(screenPos.x - mouse.x, 2) + 
+            Math.pow(screenPos.y - mouse.y, 2)
+        );
+        
+        const combinedDistance = distance + screenDist * 10; // Weight screen distance more
+        
+        if (combinedDistance < minDistance) {
+            minDistance = combinedDistance;
+            closestCell = cell;
+        }
+    });
+    
+    return closestCell;
+}
+
+// Find the closest valid cell to the touch point
+function findClosestValidCell() {
+    const validCells = cells.filter(cell => 
+        !cell.userData.occupied && 
+        isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)
+    );
+    
+    if (validCells.length === 0) return null;
+    
+    // Convert mouse position to 3D ray
+    const ray = new THREE.Vector3();
+    
+    ray.set(mouse.x, mouse.y, 0.5);
+    ray.unproject(camera);
+    ray.sub(camera.position).normalize();
+    
+    // Find cell with minimum distance to ray
+    let closestCell = null;
+    let minDistance = Infinity;
+    
+    validCells.forEach(cell => {
+        // Get cell world position
+        const cellPos = new THREE.Vector3();
+        cell.getWorldPosition(cellPos);
+        
+        // Calculate distance from ray to cell
+        const rayToCellDir = cellPos.clone().sub(camera.position);
+        const angle = ray.angleTo(rayToCellDir);
+        const distance = Math.sin(angle) * rayToCellDir.length();
+        
+        // Also consider screen space distance for better accuracy
+        const screenPos = cellPos.clone().project(camera);
+        const screenDist = Math.sqrt(
+            Math.pow(screenPos.x - mouse.x, 2) + 
+            Math.pow(screenPos.y - mouse.y, 2)
+        );
+        
+        const combinedDistance = distance + screenDist * 10; // Weight screen distance more
+        
+        if (combinedDistance < minDistance) {
+            minDistance = combinedDistance;
+            closestCell = cell;
+        }
+    });
+    
+    return closestCell;
 }
 
 // Window resize handler
@@ -2312,7 +3445,7 @@ function animate() {
     
     // Pulse hovered cell
     if (hoveredCell && !hoveredCell.userData.occupied) {
-        const pulse = Math.sin(Date.now() * 0.005) * 0.05 + 1;
+        const pulse = Math.sin(Date.now() * 0.005) * 0.05 + 1.7;
         hoveredCell.scale.set(pulse, pulse, pulse);
     }
     
