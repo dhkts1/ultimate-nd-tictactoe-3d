@@ -41,7 +41,7 @@ const CELL_SIZE = 0.4 * sizeFactor; // Bigger cells on smaller screens
 const CELL_SPACING = 0.25;
 const CUBE_SPACING = 1.0 / sizeFactor; // Minimal spacing between cubes
 const TOTAL_CUBES = 27;
-const DEBUG_MODE = true; // Set to true to enable console logging
+const DEBUG_MODE = false; // Set to true to enable console logging
 
 // Convert speed (0-100) to delay multiplier
 // 0 = very slow (10x delay), 20 = normal slow (2x), 50 = normal (1x), 100 = very fast (0.2x delay)
