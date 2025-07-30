@@ -1689,13 +1689,13 @@ function onMouseMove(event) {
     if (previousHoveredCell && previousHoveredCell.material) {
         // Always reset to default state - don't preserve adjacent highlighting
         if (previousHoveredCell.userData.occupied) {
-            // Reset occupied cells to their player colors
-            const playerColor = previousHoveredCell.userData.player === 'X' ? 0x00ff00 : 0xff3333;
-            previousHoveredCell.material.color.setHex(playerColor);
+            // Reset occupied cells to gray (same as empty cells)
+            previousHoveredCell.material.color.setHex(CUBE_COLOR);
             if (previousHoveredCell.material.emissive) {
-                previousHoveredCell.material.emissive.setHex(playerColor);
-                previousHoveredCell.material.emissiveIntensity = 0.3;
+                previousHoveredCell.material.emissive.setHex(CUBE_COLOR);
+                previousHoveredCell.material.emissiveIntensity = 0.1;
             }
+            previousHoveredCell.material.opacity = 0.2; // Somewhat see-through
             previousHoveredCell.scale.set(1, 1, 1);
         } else {
             // Reset empty cells to default
@@ -3189,13 +3189,13 @@ function onTouchEnd(event) {
     if (hoveredCell && hoveredCell.material) {
         // Always reset to default state - don't preserve adjacent highlighting
         if (hoveredCell.userData.occupied) {
-            // Reset occupied cells to their player colors
-            const playerColor = hoveredCell.userData.player === 'X' ? 0x00ff00 : 0xff3333;
-            hoveredCell.material.color.setHex(playerColor);
+            // Reset occupied cells to gray (same as empty cells)
+            hoveredCell.material.color.setHex(CUBE_COLOR);
             if (hoveredCell.material.emissive) {
-                hoveredCell.material.emissive.setHex(playerColor);
-                hoveredCell.material.emissiveIntensity = 0.3;
+                hoveredCell.material.emissive.setHex(CUBE_COLOR);
+                hoveredCell.material.emissiveIntensity = 0.1;
             }
+            hoveredCell.material.opacity = 0.2; // Somewhat see-through
             hoveredCell.scale.set(1, 1, 1);
         } else {
             // Reset empty cells to default
@@ -3236,13 +3236,13 @@ function updateHoverStateForTouch() {
         if (previousHoveredCell && previousHoveredCell.material) {
             // Always reset to default state - don't preserve adjacent highlighting
             if (previousHoveredCell.userData.occupied) {
-                // Reset occupied cells to their player colors
-                const playerColor = previousHoveredCell.userData.player === 'X' ? 0x00ff00 : 0xff3333;
-                previousHoveredCell.material.color.setHex(playerColor);
+                // Reset occupied cells to gray (same as empty cells)
+                previousHoveredCell.material.color.setHex(CUBE_COLOR);
                 if (previousHoveredCell.material.emissive) {
-                    previousHoveredCell.material.emissive.setHex(playerColor);
-                    previousHoveredCell.material.emissiveIntensity = 0.3;
+                    previousHoveredCell.material.emissive.setHex(CUBE_COLOR);
+                    previousHoveredCell.material.emissiveIntensity = 0.1;
                 }
+                previousHoveredCell.material.opacity = 0.2; // Somewhat see-through
                 previousHoveredCell.scale.set(1, 1, 1);
             } else {
                 // Reset empty cells to default
