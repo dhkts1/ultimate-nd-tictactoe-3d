@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>Ultimate 3D Tic-Tac-Toe</title>
     <style>
         * {
@@ -12,7 +13,7 @@
         }
 
         body {
-            font-family: 'Arial', sans-serif;
+            font-family: "Arial", sans-serif;
             background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
             overflow: hidden;
             color: white;
@@ -148,7 +149,7 @@
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(118, 75, 162, 0.4);
         }
-        
+
         /* Mobile responsive styles */
         @media (max-width: 768px) {
             #left-panel {
@@ -159,45 +160,45 @@
                 left: 1rem;
                 bottom: 1rem;
             }
-            
+
             .status {
                 font-size: 1.3rem;
                 padding: 12px 16px;
             }
-            
+
             .active-cube-info {
                 font-size: 1.2rem;
                 padding: 10px 16px;
             }
-            
+
             .score {
                 font-size: 1.2rem;
                 padding: 12px 16px;
             }
-            
+
             button {
                 font-size: 1.2rem;
                 padding: 0.8rem 1.5rem;
             }
-            
+
             .controls {
                 bottom: 1rem;
                 right: 1rem;
                 gap: 0.8rem;
             }
-            
+
             #help-panel {
                 font-size: 1.1rem;
                 width: 90%;
                 max-width: 90%;
                 padding: 1.5rem;
             }
-            
+
             .mode-selection {
                 width: 90%;
                 padding: 30px 20px;
             }
-            
+
             .mode-btn {
                 font-size: 1.3rem;
                 padding: 18px 35px;
@@ -205,13 +206,13 @@
                 margin: 15px auto;
                 display: block;
             }
-            
+
             /* Bigger slider on mobile */
             input[type="range"] {
                 height: 30px;
                 -webkit-appearance: none;
             }
-            
+
             input[type="range"]::-webkit-slider-thumb {
                 -webkit-appearance: none;
                 width: 30px;
@@ -220,7 +221,7 @@
                 border-radius: 50%;
                 cursor: pointer;
             }
-            
+
             input[type="range"]::-webkit-slider-track {
                 height: 10px;
                 background: rgba(255, 255, 255, 0.2);
@@ -267,7 +268,6 @@
             margin-bottom: 5px;
         }
 
-
         .cube-minimap {
             position: fixed;
             top: 2vw;
@@ -278,13 +278,12 @@
             user-select: none;
             z-index: 100;
         }
-        
+
         #minimap-canvas-container {
             width: 100%;
             height: 100%;
             pointer-events: none;
         }
-
 
         .left-panel {
             position: fixed;
@@ -366,46 +365,46 @@
                 left: 1rem;
                 padding: 0.75rem;
             }
-            
+
             h1 {
                 font-size: 1.2rem;
             }
-            
+
             .cube-minimap {
                 width: 120px;
                 height: 120px;
                 top: 1rem;
                 right: 1rem;
             }
-            
+
             .left-panel {
                 bottom: 1rem;
                 left: 1rem;
             }
-            
+
             .current-player-indicator {
                 width: 60px;
                 height: 60px;
                 font-size: 40px;
             }
-            
+
             .controls {
                 bottom: 1rem;
                 right: 1rem;
                 gap: 0.5rem;
             }
-            
+
             button {
                 padding: 0.5rem 1rem;
                 font-size: 0.8rem;
             }
-            
+
             .mode-selection {
                 padding: 20px;
                 width: 90vw;
                 max-width: 350px;
             }
-            
+
             .mode-btn {
                 padding: 10px 20px;
                 font-size: 0.9rem;
@@ -420,7 +419,7 @@
                 padding: 0 1rem;
                 bottom: 10px;
             }
-            
+
             .help-panel {
                 width: 200px;
                 font-size: 0.8rem;
@@ -429,72 +428,157 @@
         }
     </style>
 </head>
+
 <body>
     <div id="canvas-container"></div>
-    
+
     <div class="ui-overlay">
         <h1>Ultimate 3D Tic-Tac-Toe</h1>
-        <div id="cube-selection-indicator" style="display: none; margin-top: 10px; padding: 8px 16px; background: rgba(255, 255, 0, 0.2); border: 2px solid rgba(255, 255, 0, 0.6); border-radius: 8px; font-size: 0.9rem;">
-            <strong>Cube Selection Mode</strong> - Use arrows to navigate, click cell to play
+        <div id="cube-selection-indicator" style="
+          display: none;
+          margin-top: 10px;
+          padding: 8px 16px;
+          background: rgba(255, 255, 0, 0.2);
+          border: 2px solid rgba(255, 255, 0, 0.6);
+          border-radius: 8px;
+          font-size: 0.9rem;
+        ">
+            <strong>Cube Selection Mode</strong> - Use arrows to navigate, click
+            cell to play
         </div>
     </div>
-    
-    <div style="position: fixed; top: 2vw; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.5); padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; color: rgba(255, 255, 255, 0.7); display: none;" id="debug-info">
-        <span id="fps-display">FPS: 0</span> | 
+
+    <div style="
+        position: fixed;
+        top: 2vw;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.5);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.7);
+        display: none;
+      " id="debug-info">
+        <span id="fps-display">FPS: 0</span> |
         <span id="zoom-display">Zoom: 0</span>
     </div>
 
-    <div class="left-panel" id="left-panel" style="display: none;">
+    <div class="left-panel" id="left-panel" style="display: none">
         <div class="current-player-indicator" id="current-player-indicator">
             <span id="current-player-symbol">X</span>
         </div>
-        <div id="pause-ai-btn" style="width: 80px; height: 80px; border: 4px solid rgba(255, 255, 255, 0.3); border-radius: 15px; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); display: none; align-items: center; justify-content: center; font-size: 40px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; color: white; margin-top: 20px;">
+        <div id="pause-ai-btn" style="
+          width: 80px;
+          height: 80px;
+          border: 4px solid rgba(255, 255, 255, 0.3);
+          border-radius: 15px;
+          background: rgba(0, 0, 0, 0.8);
+          backdrop-filter: blur(10px);
+          display: none;
+          align-items: center;
+          justify-content: center;
+          font-size: 40px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          color: white;
+          margin-top: 20px;
+        ">
             <span id="pause-icon">▶</span>
         </div>
     </div>
 
-    <div class="cube-minimap" id="cube-minimap" style="display: none;">
+    <div class="cube-minimap" id="cube-minimap" style="display: none">
         <div id="minimap-canvas-container"></div>
     </div>
 
-
     <div class="mode-selection" id="mode-selection">
         <h2>Select Game Mode</h2>
-        <div style="margin: 20px 0; font-size: 0.9rem; color: rgba(255, 255, 255, 0.8); text-align: left; max-width: 400px; margin: 20px auto;">
-            <strong style="color: #f093fb;">Ultimate 3D Rules:</strong><br>
-            • Win a small cube to claim it<br>
-            • Your move position determines opponent's cube<br>
-            • Win 3 cubes in a row (in 3D space) to win!<br>
+        <div style="
+          margin: 20px 0;
+          font-size: 0.9rem;
+          color: rgba(255, 255, 255, 0.8);
+          text-align: left;
+          max-width: 400px;
+          margin: 20px auto;
+        ">
+            <strong style="color: #f093fb">Ultimate 3D Rules:</strong><br />
+            • Win a small cube to claim it<br />
+            • Your move position determines opponent's cube<br />
+            • Win 3 cubes in a row (in 3D space) to win!<br />
             • Click cells • Drag to rotate • Scroll to zoom
         </div>
         <button class="mode-btn" data-mode="single">vs Computer</button>
         <button class="mode-btn" data-mode="two">2 Players</button>
-        <button class="mode-btn" data-mode="ai-vs-ai">Computer vs Computer</button>
-    </div>
-    
-    <div class="mode-selection" id="first-player-selection" style="display: none;">
-        <h2>Who goes first?</h2>
-        <button class="mode-btn" data-first="player" style="margin: 10px;">You (X)</button>
-        <button class="mode-btn" data-first="computer" style="margin: 10px;">Computer (O)</button>
+        <button class="mode-btn" data-mode="ai-vs-ai">
+            Computer vs Computer
+        </button>
     </div>
 
-    <button id="settings-toggle" style="position: fixed; bottom: 2vw; right: 2vw; background: radial-gradient(circle, rgba(102, 126, 234, 0.6) 0%, rgba(255, 255, 255, 0.3) 70%); border: 2px solid rgba(102, 126, 234, 0.8); width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; opacity: 0.8; transition: all 0.3s; box-shadow: 0 0 20px rgba(102, 126, 234, 0.5); z-index: 1000; cursor: pointer;" onmouseover="this.style.opacity='1'; this.style.boxShadow='0 0 30px rgba(102, 126, 234, 0.8)'; this.style.transform='scale(1.1)'" onmouseout="this.style.opacity='0.8'; this.style.boxShadow='0 0 20px rgba(102, 126, 234, 0.5)'; this.style.transform='scale(1)'"></button>
-    
-    <div class="controls" id="controls" style="display: none;">
-        <div id="settings-panel" style="display: none; flex-direction: column; gap: 10px; position: fixed; bottom: calc(2vw + 60px); right: 2vw;">
+    <div class="mode-selection" id="first-player-selection" style="display: none">
+        <h2>Who goes first?</h2>
+        <button class="mode-btn" data-first="player" style="margin: 10px">
+            You (X)
+        </button>
+        <button class="mode-btn" data-first="computer" style="margin: 10px">
+            Computer (O)
+        </button>
+    </div>
+
+    <button id="settings-toggle" style="
+        position: fixed;
+        bottom: 2vw;
+        right: 2vw;
+        background: radial-gradient(
+          circle,
+          rgba(102, 126, 234, 0.6) 0%,
+          rgba(255, 255, 255, 0.3) 70%
+        );
+        border: 2px solid rgba(102, 126, 234, 0.8);
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.8;
+        transition: all 0.3s;
+        box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+        z-index: 1000;
+        cursor: pointer;
+      " onmouseover="this.style.opacity='1'; this.style.boxShadow='0 0 30px rgba(102, 126, 234, 0.8)'; this.style.transform='scale(1.1)'"
+        onmouseout="this.style.opacity='0.8'; this.style.boxShadow='0 0 20px rgba(102, 126, 234, 0.5)'; this.style.transform='scale(1)'"></button>
+
+    <div class="controls" id="controls" style="display: none">
+        <div id="settings-panel" style="
+          display: none;
+          flex-direction: column;
+          gap: 10px;
+          position: fixed;
+          bottom: calc(2vw + 60px);
+          right: 2vw;
+        ">
             <button id="reset-btn">New Game</button>
             <button id="change-mode-btn">Change Mode</button>
             <button id="help-btn">Help</button>
             <button id="auto-rotate-btn">Auto Rotate</button>
             <button id="disable-auto-focus-btn"></button>
-            <div style="display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.1); padding: 8px 16px; border-radius: 50px; border: 2px solid rgba(255, 255, 255, 0.3);">
-                <label style="font-size: 0.9rem;">Animation:</label>
-                <input type="range" id="speed-slider" min="50" max="2000" step="50" value="100" style="width: 100px;">
-                <span id="speed-display" style="font-size: 0.9rem; min-width: 50px;">100%</span>
+            <div style="
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 50px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+          ">
+                <label style="font-size: 0.9rem">Animation:</label>
+                <input type="range" id="speed-slider" min="50" max="2000" step="50" value="100" style="width: 100px" />
+                <span id="speed-display" style="font-size: 0.9rem; min-width: 50px">100%</span>
             </div>
         </div>
     </div>
-
 
     <div class="help-panel" id="help-panel">
         <h3>How to Play</h3>
@@ -512,4 +596,5 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="ultimate3d.js"></script>
 </body>
+
 </html>
