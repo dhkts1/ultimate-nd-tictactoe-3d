@@ -682,12 +682,12 @@ function isValidMove(cubeIndex, cellIndex) {
 
 // Make a move
 function makeMove(cubeIndex, cellIndex) {
-    if (!isValidMove(cubeIndex, cellIndex)) return;
+    if (!isValidMove(cubeIndex, cellIndex)) return false;
     
     // Don't allow moves during camera animation
     if (cameraAnimating) {
         if (DEBUG_MODE) console.log('Move blocked - camera is animating');
-        return;
+        return false;
     }
     
     // Update game state
@@ -720,9 +720,16 @@ function makeMove(cubeIndex, cellIndex) {
     // Animate mark
     animateMark(mark);
     
-    // Brief flash for AI moves
+    // Handle AI moves
     if ((gameState.gameMode === 'single' && gameState.currentPlayer === 'O') || 
         gameState.gameMode === 'ai-vs-ai') {
+        
+        // Reset previous AI move highlight
+        if (lastAIMove && lastAIMove.material) {
+            lastAIMove.material.emissive.setHex(CUBE_COLOR);
+            lastAIMove.material.emissiveIntensity = 0.1;
+        }
+        
         // Flash the cell briefly
         const originalColor = cell.material.color.getHex();
         const originalEmissive = cell.material.emissive.getHex();
@@ -733,12 +740,19 @@ function makeMove(cubeIndex, cellIndex) {
         cell.material.emissive.setHex(0xffff00);
         cell.material.emissiveIntensity = 0.8;
         
-        // Restore after brief delay (scaled by animation speed)
+        // After flash, keep it highlighted with player color
         setTimeout(() => {
             cell.material.color.setHex(originalColor);
-            cell.material.emissive.setHex(originalEmissive);
-            cell.material.emissiveIntensity = originalIntensity;
+            if (gameState.currentPlayer === 'X') {
+                cell.material.emissive.setHex(0x00ff00); // Green for X
+            } else {
+                cell.material.emissive.setHex(0xff3333); // Red for O
+            }
+            cell.material.emissiveIntensity = 0.3; // Subtle glow
         }, 150 * (100 / animationSpeed)); // 150ms at normal speed
+        
+        // Track this as the last AI move
+        lastAIMove = cell;
     }
     
     // Update cell state
@@ -754,14 +768,14 @@ function makeMove(cubeIndex, cellIndex) {
         const winningCombination = checkGameWinner();
         if (winningCombination) {
             handleGameWin(winningCombination);
-            return;
+            return true; // Move was made but game ended
         }
     }
     
     // Check for draw
     if (checkGameDraw()) {
         handleGameDraw();
-        return;
+        return true; // Move was made but game ended
     }
     
     // Determine next cube
@@ -800,6 +814,8 @@ function makeMove(cubeIndex, cellIndex) {
             setTimeout(computerMove, 1500 * (100 / animationSpeed)); // Scaled delay for AI vs AI
         }
     }
+    
+    return true; // Move was successful
 }
 
 // Check if a cube has a winner
@@ -1189,20 +1205,34 @@ function highlightAdjacentCubes(currentCubeIndex) {
                 const targetCellIndex = targetZ * 9 + targetY * 3 + targetX;
                 const targetCell = cubes[targetCubeIndex].cells[targetCellIndex];
                 
-                if (targetCell && targetCell.material && !targetCell.userData.occupied && 
-                    targetCell !== hoveredCell && targetCell !== selectedCell &&
-                    isValidMove(targetCubeIndex, targetCellIndex)) {
-                    // Make adjacent cells bright orange but see-through
-                    if (targetCell.material.emissive) {
-                        targetCell.material.emissive.setHex(0xff6600); // Orange
-                        targetCell.material.emissiveIntensity = 0.5;
-                    }
-                    targetCell.material.color.setHex(0xff8800); // Brighter orange base color
-                    targetCell.material.opacity = 0.3; // 30% opacity - see through
-                    targetCell.material.transparent = true;
+                if (targetCell && targetCell.material && 
+                    targetCell !== hoveredCell && targetCell !== selectedCell) {
                     
-                    // Track this cell as highlighted
-                    highlightedAdjacentCells.push(targetCell);
+                    if (targetCell.userData.occupied) {
+                        // Occupied adjacent cells - highlight in purple
+                        if (targetCell.material.emissive) {
+                            targetCell.material.emissive.setHex(0x8844ff); // Purple
+                            targetCell.material.emissiveIntensity = 0.5;
+                        }
+                        targetCell.material.color.setHex(0x9955ff); // Purple base color
+                        targetCell.material.opacity = 0.5; // 50% opacity
+                        targetCell.material.transparent = true;
+                        
+                        // Track this cell as highlighted
+                        highlightedAdjacentCells.push(targetCell);
+                    } else if (isValidMove(targetCubeIndex, targetCellIndex)) {
+                        // Valid empty adjacent cells - highlight in orange
+                        if (targetCell.material.emissive) {
+                            targetCell.material.emissive.setHex(0xff6600); // Orange
+                            targetCell.material.emissiveIntensity = 0.5;
+                        }
+                        targetCell.material.color.setHex(0xff8800); // Brighter orange base color
+                        targetCell.material.opacity = 0.3; // 30% opacity - see through
+                        targetCell.material.transparent = true;
+                        
+                        // Track this cell as highlighted
+                        highlightedAdjacentCells.push(targetCell);
+                    }
                 }
             }
         });
@@ -1211,15 +1241,34 @@ function highlightAdjacentCubes(currentCubeIndex) {
 
 // Reset adjacent cube highlighting
 function resetAdjacentCubeHighlighting() {
-    // Only reset cells that were previously highlighted as adjacent
-    highlightedAdjacentCells.forEach(cell => {
-        if (cell && cell.material && !cell.userData.occupied) {
-            cell.material.color.setHex(CUBE_COLOR); // Reset base color
-            if (cell.material.emissive) {
-                cell.material.emissive.setHex(CUBE_COLOR);
-                cell.material.emissiveIntensity = 0.1;
+    // Reset ALL cells to ensure no highlights persist
+    cells.forEach(cell => {
+        if (cell && cell.material) {
+            if (cell.userData.occupied) {
+                // Reset occupied cells to gray (same as empty cells)
+                cell.material.color.setHex(CUBE_COLOR);
+                if (cell.material.emissive) {
+                    cell.material.emissive.setHex(CUBE_COLOR);
+                    cell.material.emissiveIntensity = 0.1;
+                }
+                cell.material.opacity = 0.2; // Somewhat see-through for occupied cells
+                cell.scale.set(1, 1, 1); // Occupied cells are always scale 1
+            } else {
+                // Reset empty cells
+                cell.material.color.setHex(CUBE_COLOR); // Reset base color
+                if (cell.material.emissive) {
+                    cell.material.emissive.setHex(CUBE_COLOR);
+                    cell.material.emissiveIntensity = 0.1;
+                }
+                cell.material.opacity = 0.4; // Reset to original opacity
+                
+                // Check if this cell should remain scaled as a valid move
+                if (isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
+                    cell.scale.set(1.3, 1.3, 1.3);
+                } else {
+                    cell.scale.set(1, 1, 1);
+                }
             }
-            cell.material.opacity = 0.4; // Reset to original opacity
             cell.material.transparent = true;
         }
     });
@@ -1631,62 +1680,37 @@ function onMouseMove(event) {
     
     // Always check for cell hover, regardless of selection mode
     const intersects = raycaster.intersectObjects(cells);
+    
+    // Store previous hovered cell to reset it properly
+    const previousHoveredCell = hoveredCell;
+    hoveredCell = null;
 
-    // Reset hover state - but preserve adjacent cell highlighting
-    if (hoveredCell && hoveredCell.material) {
-        // Check if this cell should remain highlighted as an adjacent cell
-        let isAdjacentCell = false;
-        if (selectedCell) {
-            const cellX = selectedCell.userData.x;
-            const cellY = selectedCell.userData.y;
-            const cellZ = selectedCell.userData.z;
-            const cubeIndex = selectedCell.userData.cubeIndex;
-            
-            // Check if hoveredCell is adjacent to selectedCell
-            const hovX = hoveredCell.userData.x;
-            const hovY = hoveredCell.userData.y;
-            const hovZ = hoveredCell.userData.z;
-            const hovCubeIndex = hoveredCell.userData.cubeIndex;
-            
-            // Check same cube adjacency
-            if (cubeIndex === hovCubeIndex) {
-                const dx = Math.abs(cellX - hovX);
-                const dy = Math.abs(cellY - hovY);
-                const dz = Math.abs(cellZ - hovZ);
-                if ((dx === 1 && dy === 0 && dz === 0) ||
-                    (dx === 0 && dy === 1 && dz === 0) ||
-                    (dx === 0 && dy === 0 && dz === 1)) {
-                    isAdjacentCell = true;
-                }
-            } else {
-                // Check cross-cube adjacency
-                if ((cellX === 0 && hovX === 2 && getCubeInDirection(cubeIndex, 'left') === hovCubeIndex) ||
-                    (cellX === 2 && hovX === 0 && getCubeInDirection(cubeIndex, 'right') === hovCubeIndex) ||
-                    (cellY === 0 && hovY === 2 && getCubeInDirection(cubeIndex, 'down') === hovCubeIndex) ||
-                    (cellY === 2 && hovY === 0 && getCubeInDirection(cubeIndex, 'up') === hovCubeIndex) ||
-                    (cellZ === 0 && hovZ === 2 && getCubeInDirection(cubeIndex, 'forward') === hovCubeIndex) ||
-                    (cellZ === 2 && hovZ === 0 && getCubeInDirection(cubeIndex, 'backward') === hovCubeIndex)) {
-                    isAdjacentCell = true;
-                }
+    // Reset previous hover state
+    if (previousHoveredCell && previousHoveredCell.material) {
+        // Always reset to default state - don't preserve adjacent highlighting
+        if (previousHoveredCell.userData.occupied) {
+            // Reset occupied cells to their player colors
+            const playerColor = previousHoveredCell.userData.player === 'X' ? 0x00ff00 : 0xff3333;
+            previousHoveredCell.material.color.setHex(playerColor);
+            if (previousHoveredCell.material.emissive) {
+                previousHoveredCell.material.emissive.setHex(playerColor);
+                previousHoveredCell.material.emissiveIntensity = 0.3;
             }
-        }
-        
-        if (isAdjacentCell && highlightedAdjacentCells.includes(hoveredCell)) {
-            // Keep orange highlighting for adjacent cells
-            hoveredCell.material.color.setHex(0xff8800);
-            if (hoveredCell.material.emissive) {
-                hoveredCell.material.emissive.setHex(0xff6600);
-                hoveredCell.material.emissiveIntensity = 0.25;
-            }
+            previousHoveredCell.scale.set(1, 1, 1);
         } else {
-            // Reset to default
-            hoveredCell.material.color.setHex(CUBE_COLOR);
-            if (hoveredCell.material.emissive) {
-                hoveredCell.material.emissive.setHex(CUBE_COLOR);
-                hoveredCell.material.emissiveIntensity = 0.1;
+            // Reset empty cells to default
+            previousHoveredCell.material.color.setHex(CUBE_COLOR);
+            if (previousHoveredCell.material.emissive) {
+                previousHoveredCell.material.emissive.setHex(CUBE_COLOR);
+                previousHoveredCell.material.emissiveIntensity = 0.1;
+            }
+            // Only set scale to 1.3 if this cell is in a valid move position
+            if (isValidMove(previousHoveredCell.userData.cubeIndex, previousHoveredCell.userData.cellIndex)) {
+                previousHoveredCell.scale.set(1.3, 1.3, 1.3);
+            } else {
+                previousHoveredCell.scale.set(1, 1, 1);
             }
         }
-        hoveredCell.scale.set(1.3, 1.3, 1.3); // Keep at base size when resetting
     }
     
     cells.forEach(cell => {
@@ -1702,30 +1726,18 @@ function onMouseMove(event) {
         if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
             hoveredCell = cell;
             
-            // Check if this cell is also highlighted as adjacent
-            const isAdjacentHighlighted = highlightedAdjacentCells.includes(cell);
-            
-            if (isAdjacentHighlighted) {
-                // Mixed color - purple (blue + orange)
-                cell.material.emissive.setHex(0x8844ff);
-                cell.material.emissiveIntensity = 0.5;
-                cell.material.color.setHex(0x9955ff);
-            } else {
-                // Normal blue hover
-                cell.material.emissive.setHex(0x0066ff);
-                cell.material.emissiveIntensity = 0.4;
-                // Keep the normal gray color for non-adjacent cells
-                cell.material.color.setHex(CUBE_COLOR);
-            }
+            // Always apply normal blue hover - don't mix with adjacent colors
+            cell.material.emissive.setHex(0x0066ff);
+            cell.material.emissiveIntensity = 0.4;
+            // Keep the normal gray color for hover
+            cell.material.color.setHex(CUBE_COLOR);
             
             cell.scale.set(1.7, 1.7, 1.7);
             renderer.domElement.style.cursor = 'pointer';
         } else {
-            hoveredCell = null;
             renderer.domElement.style.cursor = 'default';
         }
     } else {
-        hoveredCell = null;
         renderer.domElement.style.cursor = 'default';
     }
     
@@ -1882,8 +1894,10 @@ function onMouseClick() {
                 const cell = cellIntersects[0].object;
                 if (cell === selectedCell) {
                     // Double-clicking on the already selected cell - make the move
-                    makeMove(cell.userData.cubeIndex, cell.userData.cellIndex);
-                    toggleCellSelectionMode();
+                    const moveMade = makeMove(cell.userData.cubeIndex, cell.userData.cellIndex);
+                    if (moveMade) {
+                        toggleCellSelectionMode();
+                    }
                 } else {
                     // Clicking on a different valid cell - move the selection
                     selectCell(cell, true); // Update highlight to new position
@@ -2893,6 +2907,13 @@ function resetGame() {
     // Clear move history
     moveHistory = [];
     
+    // Reset last AI move highlight
+    if (lastAIMove && lastAIMove.material) {
+        lastAIMove.material.emissive.setHex(CUBE_COLOR);
+        lastAIMove.material.emissiveIntensity = 0.1;
+    }
+    lastAIMove = null;
+    
     // Clear cubes with win lines tracking  
     cubesWithWinLines.clear();
     
@@ -2925,13 +2946,19 @@ function resetGame() {
 // Setup UI event listeners
 function setupUIListeners() {
     // Mode selection
-    document.querySelectorAll('.mode-btn').forEach(btn => {
+    document.querySelectorAll('[data-mode]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             gameState.gameMode = e.target.dataset.mode;
             document.getElementById('mode-selection').style.display = 'none';
-            document.getElementById('controls').style.display = 'flex';
-            document.getElementById('cube-minimap').style.display = 'grid';
-            document.getElementById('left-panel').style.display = 'flex';
+            
+            // For single player, show first player selection
+            if (gameState.gameMode === 'single') {
+                document.getElementById('first-player-selection').style.display = 'block';
+            } else {
+                document.getElementById('controls').style.display = 'flex';
+                document.getElementById('cube-minimap').style.display = 'grid';
+                document.getElementById('left-panel').style.display = 'flex';
+            }
             
             // Show/hide pause button based on mode
             const pauseBtn = document.getElementById('pause-ai-btn');
@@ -2951,6 +2978,29 @@ function setupUIListeners() {
             if (gameState.gameMode === 'ai-vs-ai') {
                 setTimeout(computerMove, 1000);
             }
+        });
+    });
+    
+    // First player selection for single player mode
+    document.querySelectorAll('[data-first]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const startWithComputer = e.target.dataset.first === 'computer';
+            
+            // Hide first player selection and show game
+            document.getElementById('first-player-selection').style.display = 'none';
+            document.getElementById('controls').style.display = 'flex';
+            document.getElementById('cube-minimap').style.display = 'grid';
+            document.getElementById('left-panel').style.display = 'flex';
+            
+            // If computer goes first, switch to O and make the first move
+            if (startWithComputer) {
+                gameState.currentPlayer = 'O';
+                setTimeout(computerMove, 500); // Small delay before computer's first move
+            }
+            
+            updateUI();
+            updateMinimap();
+            updateActiveHighlights();
         });
     });
 
@@ -3130,12 +3180,38 @@ function onTouchEnd(event) {
             mouse.x = (touchEndPos.x / window.innerWidth) * 2 - 1;
             mouse.y = -(touchEndPos.y / window.innerHeight) * 2 + 1;
             
-            // Find closest interactive cell and make move
-            handleTouchClick();
+            // Use the exact same logic as mouse click
+            onMouseClick();
         }
     }
     
-    // Reset hover state
+    // Reset hover state properly
+    if (hoveredCell && hoveredCell.material) {
+        // Always reset to default state - don't preserve adjacent highlighting
+        if (hoveredCell.userData.occupied) {
+            // Reset occupied cells to their player colors
+            const playerColor = hoveredCell.userData.player === 'X' ? 0x00ff00 : 0xff3333;
+            hoveredCell.material.color.setHex(playerColor);
+            if (hoveredCell.material.emissive) {
+                hoveredCell.material.emissive.setHex(playerColor);
+                hoveredCell.material.emissiveIntensity = 0.3;
+            }
+            hoveredCell.scale.set(1, 1, 1);
+        } else {
+            // Reset empty cells to default
+            hoveredCell.material.color.setHex(CUBE_COLOR);
+            if (hoveredCell.material.emissive) {
+                hoveredCell.material.emissive.setHex(CUBE_COLOR);
+                hoveredCell.material.emissiveIntensity = 0.1;
+            }
+            if (isValidMove(hoveredCell.userData.cubeIndex, hoveredCell.userData.cellIndex)) {
+                hoveredCell.scale.set(1.3, 1.3, 1.3);
+            } else {
+                hoveredCell.scale.set(1, 1, 1);
+            }
+        }
+    }
+    
     hoveredCell = null;
     cells.forEach(cell => {
         if (!cell.userData.occupied && isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex)) {
@@ -3152,11 +3228,36 @@ function updateHoverStateForTouch() {
         // Normal mode - show hover on cells
         const intersects = raycaster.intersectObjects(cells);
         
-        // Reset hover state
-        if (hoveredCell && hoveredCell.material) {
-            hoveredCell.material.emissive.setHex(CUBE_COLOR);
-            hoveredCell.material.emissiveIntensity = 0.1;
-            hoveredCell.scale.set(1.3, 1.3, 1.3); // Keep at base size when resetting
+        // Store previous hovered cell to reset it properly
+        const previousHoveredCell = hoveredCell;
+        hoveredCell = null;
+        
+        // Reset previous hover state
+        if (previousHoveredCell && previousHoveredCell.material) {
+            // Always reset to default state - don't preserve adjacent highlighting
+            if (previousHoveredCell.userData.occupied) {
+                // Reset occupied cells to their player colors
+                const playerColor = previousHoveredCell.userData.player === 'X' ? 0x00ff00 : 0xff3333;
+                previousHoveredCell.material.color.setHex(playerColor);
+                if (previousHoveredCell.material.emissive) {
+                    previousHoveredCell.material.emissive.setHex(playerColor);
+                    previousHoveredCell.material.emissiveIntensity = 0.3;
+                }
+                previousHoveredCell.scale.set(1, 1, 1);
+            } else {
+                // Reset empty cells to default
+                previousHoveredCell.material.color.setHex(CUBE_COLOR);
+                if (previousHoveredCell.material.emissive) {
+                    previousHoveredCell.material.emissive.setHex(CUBE_COLOR);
+                    previousHoveredCell.material.emissiveIntensity = 0.1;
+                }
+                // Only set scale to 1.3 if this cell is in a valid move position
+                if (isValidMove(previousHoveredCell.userData.cubeIndex, previousHoveredCell.userData.cellIndex)) {
+                    previousHoveredCell.scale.set(1.3, 1.3, 1.3);
+                } else {
+                    previousHoveredCell.scale.set(1, 1, 1);
+                }
+            }
         }
         
         cells.forEach(cell => {
@@ -3190,71 +3291,6 @@ function updateHoverStateForTouch() {
     // In cube selection mode, hover is handled by onMouseMove
 }
 
-// Helper function to handle touch clicks with smart cell detection
-function handleTouchClick() {
-    // Don't allow clicks in AI vs AI mode
-    if (gameState.gameMode === 'ai-vs-ai') return;
-    
-    if (!isInCellSelectionMode) {
-        // First touch - enter cube selection mode
-        if (!gameState.gameOver) {
-            toggleCellSelectionMode();
-        }
-    } else {
-        // In cube selection mode
-        raycaster.setFromCamera(mouse, camera);
-        
-        // Check if touching an arrow
-        const arrowObjects = [];
-        if (navigationArrows) {
-            navigationArrows.forEach(arrow => {
-                if (arrow.group.visible) {
-                    arrowObjects.push(arrow.cone, arrow.cylinder);
-                }
-            });
-        }
-        
-        const arrowIntersects = raycaster.intersectObjects(arrowObjects);
-        if (arrowIntersects.length > 0) {
-            // Find which arrow was touched
-            const touchedObject = arrowIntersects[0].object;
-            const touchedArrow = navigationArrows.find(arrow => 
-                arrow.cone === touchedObject || arrow.cylinder === touchedObject
-            );
-            
-            if (touchedArrow) {
-                const newCubeIndex = getCubeInDirection(selectedCube, touchedArrow.name);
-                if (newCubeIndex !== -1) {
-                    selectCube(newCubeIndex);
-                }
-            }
-        } else {
-            // Check if touching a cell in the selected cube
-            const selectedCubeCells = selectedCube !== null ? cubes[selectedCube].cells : [];
-            const cellIntersects = raycaster.intersectObjects(selectedCubeCells);
-            
-            if (cellIntersects.length > 0) {
-                const cell = cellIntersects[0].object;
-                if (!cell.userData.occupied && 
-                    isValidMove(cell.userData.cubeIndex, cell.userData.cellIndex) && 
-                    !gameState.gameOver) {
-                    // Make the move and exit selection mode
-                    makeMove(cell.userData.cubeIndex, cell.userData.cellIndex);
-                    toggleCellSelectionMode();
-                }
-            } else {
-                // If no direct hit on selected cube, try finding closest cell in selected cube
-                const closestCell = findClosestValidCellInCube(selectedCube);
-                if (closestCell) {
-                    makeMove(closestCell.userData.cubeIndex, closestCell.userData.cellIndex);
-                    toggleCellSelectionMode();
-                } else {
-                    // Touching outside - do nothing, keep selection mode active
-                }
-            }
-        }
-    }
-}
 
 // Find the closest valid cell in a specific cube
 function findClosestValidCellInCube(cubeIndex) {
